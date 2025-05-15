@@ -1,55 +1,38 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'dart:io' show Platform; // ⛔ Chỉ dùng được khi không chạy web
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'screens/gmail_home_page.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const GmailApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class GmailApp extends StatelessWidget {
+  const GmailApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: HelloText(),
+      title: 'Gmail Clone',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
         ),
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        quill.FlutterQuillLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('vi'), // Add more as needed
+      ],
+      home: const GmailHomePage(),
     );
-  }
-}
-
-class HelloText extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    // Cách 1: Nếu chạy web
-    if (kIsWeb) {
-      return const Text(
-        "Hello",
-        style: TextStyle(
-          fontSize: 32,
-          color: Colors.blue,
-          fontFamily: 'Roboto',
-        ),
-      );
-    }
-
-    // Cách 2: Nếu chạy mobile (Android/iOS)
-    // Note: Platform chỉ chạy được trên thiết bị thật, không chạy trên web
-    if (Platform.isAndroid || Platform.isIOS) {
-      return const Text(
-        "Hello",
-        style: TextStyle(
-          fontSize: 32,
-          color: Colors.red,
-          fontFamily: 'Arial',
-        ),
-      );
-    }
-
-    // Default fallback
-    return const Text("Hello");
   }
 }
