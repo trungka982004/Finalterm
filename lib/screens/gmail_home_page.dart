@@ -15,7 +15,7 @@ class GmailHomePage extends StatefulWidget {
 
 class _GmailHomePageState extends State<GmailHomePage> {
   int _selectedIndex = 0;
-  bool _isDrawerOpen = false;
+  bool _showAllDrawerItems = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -74,6 +74,26 @@ class _GmailHomePageState extends State<GmailHomePage> {
 
   final List<String> _labels = ['Important', 'Work', 'Personal'];
 
+  // Sidebar items
+  final List<Map<String, dynamic>> _drawerItems = [
+    {'icon': Icons.inbox, 'title': 'Inbox', 'trailing': '1,046'},
+    {'icon': Icons.star, 'title': 'Starred'},
+    {'icon': Icons.snooze, 'title': 'Snoozed'},
+    {'icon': Icons.send, 'title': 'Sent'},
+    {'icon': Icons.drafts, 'title': 'Drafts', 'trailing': '41'},
+    {'icon': Icons.label_important, 'title': 'Important'},
+    {'icon': Icons.chat, 'title': 'Chats'},
+    {'icon': Icons.schedule, 'title': 'Scheduled'},
+    {'icon': Icons.mail, 'title': 'All Mail'},
+    {'icon': Icons.report, 'title': 'Spam', 'trailing': '8'},
+    {'icon': Icons.delete, 'title': 'Trash'},
+    {'icon': Icons.settings, 'title': 'Manage labels'},
+    {'icon': Icons.add, 'title': 'Create new label'},
+  ];
+
+  // Add a list to track checked state for each email
+  List<bool> _checkedEmails = [];
+
   @override
   void initState() {
     super.initState();
@@ -82,6 +102,8 @@ class _GmailHomePageState extends State<GmailHomePage> {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+    // Initialize checked state for emails
+    _checkedEmails = List<bool>.filled(_emails.length, false);
   }
 
   List<Map<String, dynamic>> get _filteredEmails {
@@ -190,13 +212,13 @@ class _GmailHomePageState extends State<GmailHomePage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.black87),
-          onPressed: () {
-            setState(() {
-              _isDrawerOpen = !_isDrawerOpen;
-            });
-          },
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black87),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
         ),
         titleSpacing: 0,
         title: Row(
@@ -251,9 +273,9 @@ class _GmailHomePageState extends State<GmailHomePage> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.filter_alt_outlined),
-                        tooltip: 'Advanced search',
+                        icon: const Icon(Icons.tune, color: Colors.black54),
                         onPressed: _openAdvancedSearch,
+                        tooltip: 'Advanced search',
                       ),
                     ],
                   ),
@@ -278,197 +300,111 @@ class _GmailHomePageState extends State<GmailHomePage> {
           const SizedBox(width: 16),
         ],
       ),
-      drawer: NavigationDrawer(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (int index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-          Navigator.pop(context);
-        },
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  _openCompose();
-                },
-                icon: const Icon(Icons.edit, color: Colors.black87),
-                label: const Text('Compose', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xffeaf1fb),
-                  foregroundColor: Colors.black87,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.white,
+              ),
+              child: Row(
+                children: [
+                  Image.network(
+                    'https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png',
+                    height: 32,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.email, color: Colors.red),
                   ),
-                  textStyle: const TextStyle(fontSize: 18),
-                ),
-              ),
-            ),
-          ),
-          const NavigationDrawerDestination(
-            icon: Icon(Icons.inbox),
-            label: Text('Inbox'),
-          ),
-          const NavigationDrawerDestination(
-            icon: Icon(Icons.star),
-            label: Text('Starred'),
-          ),
-          const NavigationDrawerDestination(
-            icon: Icon(Icons.send),
-            label: Text('Sent'),
-          ),
-          const NavigationDrawerDestination(
-            icon: Icon(Icons.drafts),
-            label: Text('Drafts'),
-          ),
-          if (_selectedIndex == 3 && _drafts.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 24, right: 8, top: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: List.generate(_drafts.length, (i) {
-                  final draft = _drafts[i];
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      draft['subject']?.isNotEmpty == true ? draft['subject'] : '(No subject)',
-                      style: const TextStyle(fontSize: 14),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Gmail',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.black87,
                     ),
-                    subtitle: Text(
-                      draft['to']?.isNotEmpty == true ? draft['to'] : '(No recipient)',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    onTap: () => _openDraft(i),
-                  );
-                }),
+                  ),
+                ],
               ),
             ),
-          const Divider(),
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Labels',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+            // Show first 5 items, then More/Less, then the rest if expanded
+            ..._buildDrawerListTiles(),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text('Categories', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.label, color: Colors.grey),
-            title: const Text('Important'),
-            onTap: () {},
-          ),
-          ListTile(
-            leading: const Icon(Icons.label, color: Colors.grey),
-            title: const Text('Work'),
-            onTap: () {},
-          ),
-          ListTile(
-            leading: const Icon(Icons.label, color: Colors.grey),
-            title: const Text('Personal'),
-            onTap: () {},
-          ),
-        ],
+          ],
+        ),
       ),
-      body: Row(
+      body: Column(
         children: [
-          if (_isDrawerOpen)
-            NavigationRail(
-              extended: true,
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.inbox),
-                  label: Text('Inbox'),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.grey[300]!,
+                  width: 1,
                 ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.star),
-                  label: Text('Starred'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.send),
-                  label: Text('Sent'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.drafts),
-                  label: Text('Drafts'),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildCategoryChip('Primary', Icons.inbox, true),
+                        _buildCategoryChip('Social', Icons.people, false),
+                        _buildCategoryChip('Promotions', Icons.local_offer, false),
+                        _buildCategoryChip('Updates', Icons.info, false),
+                      ],
+                    ),
+                  ),
                 ),
               ],
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (int index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
             ),
+          ),
           Expanded(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Colors.grey[300]!,
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _buildCategoryChip('Primary', Icons.inbox, true),
-                              _buildCategoryChip('Social', Icons.people, false),
-                              _buildCategoryChip('Promotions', Icons.local_offer, false),
-                              _buildCategoryChip('Updates', Icons.info, false),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: _filteredEmails.length,
-                    itemBuilder: (context, index) {
-                      final email = _filteredEmails[index];
-                      return EmailListItem(
-                        sender: email['sender'],
-                        subject: email['subject'],
-                        preview: email['preview'],
-                        time: email['time'],
-                        isRead: email['isRead'],
-                        isStarred: email['isStarred'],
-                        onTap: () => _openEmailDetails(_emails.indexOf(email)),
-                        onReply: () {
-                          _openCompose(
-                            to: email['sender'],
-                            subject: 'Re: ${email['subject']}',
-                            body: '\n\nOn ${email['time']}, ${email['sender']} wrote:\n${email['body']}',
-                          );
-                        },
-                        onForward: () {
-                          _openCompose(
-                            subject: 'Fwd: ${email['subject']}',
-                            body: '\n\n---------- Forwarded message ----------\nFrom: ${email['sender']}\nDate: ${email['time']}\nSubject: ${email['subject']}\n\n${email['body']}',
-                          );
-                        },
+            child: ListView.builder(
+              itemCount: _filteredEmails.length,
+              itemBuilder: (context, index) {
+                final email = _filteredEmails[index];
+                // Find the original index in _emails to sync checked state
+                final originalIndex = _emails.indexOf(email);
+                return InkWell(
+                  onTap: () => _openEmailDetails(originalIndex),
+                  child: EmailListItem(
+                    sender: email['sender'],
+                    subject: email['subject'],
+                    preview: email['preview'],
+                    time: email['time'],
+                    isRead: email['isRead'],
+                    isStarred: email['isStarred'],
+                    isChecked: _checkedEmails[originalIndex],
+                    onChecked: (checked) {
+                      setState(() {
+                        _checkedEmails[originalIndex] = checked ?? false;
+                      });
+                    },
+                    onReply: () {
+                      _openCompose(
+                        to: email['sender'],
+                        subject: 'Re: ${email['subject']}',
+                        body: '\n\nOn ${email['time']}, ${email['sender']} wrote:\n${email['body']}',
+                      );
+                    },
+                    onForward: () {
+                      _openCompose(
+                        subject: 'Fwd: ${email['subject']}',
+                        body: '\n\n---------- Forwarded message ----------\nFrom: ${email['sender']}\nDate: ${email['time']}\nSubject: ${email['subject']}\n\n${email['body']}',
                       );
                     },
                   ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ],
@@ -480,6 +416,72 @@ class _GmailHomePageState extends State<GmailHomePage> {
         child: const Icon(Icons.edit),
       ),
     );
+  }
+
+  List<Widget> _buildDrawerListTiles() {
+    List<Widget> tiles = [];
+    int showCount = _showAllDrawerItems ? _drawerItems.length : 5;
+
+    for (int i = 0; i < showCount; i++) {
+      tiles.add(
+        ListTile(
+          leading: Icon(_drawerItems[i]['icon']),
+          title: Text(_drawerItems[i]['title']),
+          selected: _selectedIndex == i,
+          onTap: () {
+            setState(() => _selectedIndex = i);
+            Navigator.pop(context);
+          },
+          trailing: _drawerItems[i]['trailing'] != null
+              ? Text(_drawerItems[i]['trailing'], style: TextStyle(color: Colors.grey))
+              : null,
+        ),
+      );
+    }
+
+    if (!_showAllDrawerItems) {
+      tiles.add(
+        ListTile(
+          leading: const Icon(Icons.keyboard_arrow_down),
+          title: const Text('More'),
+          onTap: () {
+            setState(() {
+              _showAllDrawerItems = true;
+            });
+          },
+        ),
+      );
+    } else {
+      tiles.add(
+        ListTile(
+          leading: const Icon(Icons.keyboard_arrow_up),
+          title: const Text('Less'),
+          onTap: () {
+            setState(() {
+              _showAllDrawerItems = false;
+            });
+          },
+        ),
+      );
+      // Add the rest of the items if expanded
+      for (int i = 5; i < _drawerItems.length; i++) {
+        tiles.add(
+          ListTile(
+            leading: Icon(_drawerItems[i]['icon']),
+            title: Text(_drawerItems[i]['title']),
+            selected: _selectedIndex == i,
+            onTap: () {
+              setState(() => _selectedIndex = i);
+              Navigator.pop(context);
+            },
+            trailing: _drawerItems[i]['trailing'] != null
+                ? Text(_drawerItems[i]['trailing'], style: TextStyle(color: Colors.grey))
+                : null,
+          ),
+        );
+      }
+    }
+    return tiles;
   }
 
   Widget _buildCategoryChip(String label, IconData icon, bool isSelected) {

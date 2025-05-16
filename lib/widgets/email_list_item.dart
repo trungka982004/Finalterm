@@ -7,6 +7,8 @@ class EmailListItem extends StatelessWidget {
   final String time;
   final bool isRead;
   final bool isStarred;
+  final bool isChecked;
+  final ValueChanged<bool?>? onChecked;
   final VoidCallback? onTap;
   final VoidCallback? onReply;
   final VoidCallback? onForward;
@@ -19,6 +21,8 @@ class EmailListItem extends StatelessWidget {
     required this.time,
     this.isRead = false,
     this.isStarred = false,
+    this.isChecked = false,
+    this.onChecked,
     this.onTap,
     this.onReply,
     this.onForward,
@@ -42,24 +46,23 @@ class EmailListItem extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 40,
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: Icon(
-                      isStarred ? Icons.star : Icons.star_border,
-                      color: isStarred ? Colors.amber : Colors.grey,
-                      size: 20,
-                    ),
-                    onPressed: () {
-                      // Handle star/unstar
-                    },
+                  Checkbox(
+                    value: isChecked,
+                    onChanged: onChecked,
+                  ),
+                  Icon(
+                    isStarred ? Icons.star : Icons.star_border,
+                    color: isStarred ? Colors.amber : Colors.grey,
+                    size: 20,
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,7 +105,6 @@ class EmailListItem extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
-                  // Reply/Forward actions
                   Row(
                     children: [
                       if (onReply != null)
