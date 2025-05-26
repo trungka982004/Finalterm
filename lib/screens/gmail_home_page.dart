@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
+import '../providers/email_view_provider.dart';
 import '../widgets/email_list_item.dart';
 import '../widgets/compose_mail_dialog.dart';
 import '../widgets/email_details_dialog.dart';
 import '../widgets/advanced_search_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'profile_page.dart';
+import 'label_management_page.dart';
+import 'settings_page.dart';
 
 class GmailHomePage extends StatefulWidget {
   const GmailHomePage({super.key});
@@ -19,55 +25,92 @@ class _GmailHomePageState extends State<GmailHomePage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // Email categories
+  final List<Map<String, dynamic>> _emailCategories = [
+    {
+      'name': 'Inbox',
+      'icon': Icons.inbox,
+      'count': '1,046',
+      'emails': [
+        {
+          'sender': 'John Doe',
+          'subject': 'Project Update',
+          'preview': 'Hi team, I wanted to share the latest updates...',
+          'time': '10:30 AM',
+          'isRead': false,
+          'isStarred': true,
+          'hasAttachment': true,
+        },
+        // Add more sample emails
+      ],
+    },
+    {
+      'name': 'Starred',
+      'icon': Icons.star,
+      'count': '12',
+      'emails': [],
+    },
+    {
+      'name': 'Snoozed',
+      'icon': Icons.snooze,
+      'count': '0',
+      'emails': [],
+    },
+    {
+      'name': 'Sent',
+      'icon': Icons.send,
+      'count': '0',
+      'emails': [],
+    },
+    {
+      'name': 'Drafts',
+      'icon': Icons.drafts,
+      'count': '41',
+      'emails': [],
+    },
+    {
+      'name': 'Important',
+      'icon': Icons.label_important,
+      'count': '0',
+      'emails': [],
+    },
+    {
+      'name': 'Chats',
+      'icon': Icons.chat,
+      'count': '0',
+      'emails': [],
+    },
+    {
+      'name': 'Scheduled',
+      'icon': Icons.schedule,
+      'count': '0',
+      'emails': [],
+    },
+    {
+      'name': 'All Mail',
+      'icon': Icons.mail,
+      'count': '0',
+      'emails': [],
+    },
+    {
+      'name': 'Spam',
+      'icon': Icons.report,
+      'count': '8',
+      'emails': [],
+    },
+    {
+      'name': 'Trash',
+      'icon': Icons.delete,
+      'count': '0',
+      'emails': [],
+    },
+  ];
+
   // Advanced search filters
   DateTime? _dateFrom;
   DateTime? _dateTo;
   bool _hasAttachment = false;
   String _searchIn = 'all'; // 'all', 'subject', 'sender', 'body'
-
-  // Sample email data
-  final List<Map<String, dynamic>> _emails = [
-    {
-      'sender': 'John Doe',
-      'subject': 'Project Update',
-      'preview': 'Hi team, I wanted to share the latest updates on our project...',
-      'body': 'Hi team,\n\nI wanted to share the latest updates on our project...\n\nBest,\nJohn',
-      'time': '10:30 AM',
-      'isRead': false,
-      'isStarred': true,
-      'category': 'primary',
-    },
-    {
-      'sender': 'Alice Smith',
-      'subject': 'Meeting Tomorrow',
-      'preview': 'Don\'t forget about our team meeting tomorrow at 2 PM...',
-      'body': 'Don\'t forget about our team meeting tomorrow at 2 PM in the main conference room.',
-      'time': '9:15 AM',
-      'isRead': true,
-      'isStarred': false,
-      'category': 'primary',
-    },
-    {
-      'sender': 'Tech Newsletter',
-      'subject': 'Weekly Tech Digest',
-      'preview': 'Here are the top tech stories of the week...',
-      'body': 'Here are the top tech stories of the week...\n1. Flutter 3.0 Released\n2. Dart 2.18 Announced',
-      'time': 'Yesterday',
-      'isRead': true,
-      'isStarred': false,
-      'category': 'promotions',
-    },
-    {
-      'sender': 'HR Department',
-      'subject': 'Benefits Update',
-      'preview': 'Important information about your health benefits...',
-      'body': 'Important information about your health benefits...\nPlease review the attached documents.',
-      'time': 'Yesterday',
-      'isRead': false,
-      'isStarred': false,
-      'category': 'primary',
-    },
-  ];
 
   // Drafts storage
   final List<Map<String, dynamic>> _drafts = [];
@@ -87,8 +130,6 @@ class _GmailHomePageState extends State<GmailHomePage> {
     {'icon': Icons.mail, 'title': 'All Mail'},
     {'icon': Icons.report, 'title': 'Spam', 'trailing': '8'},
     {'icon': Icons.delete, 'title': 'Trash'},
-    {'icon': Icons.settings, 'title': 'Manage labels'},
-    {'icon': Icons.add, 'title': 'Create new label'},
   ];
 
   // Add a list to track checked state for each email
@@ -103,11 +144,14 @@ class _GmailHomePageState extends State<GmailHomePage> {
       });
     });
     // Initialize checked state for emails
-    _checkedEmails = List<bool>.filled(_emails.length, false);
+    _checkedEmails = List<bool>.filled(_emailCategories.length, false);
   }
 
   List<Map<String, dynamic>> get _filteredEmails {
-    List<Map<String, dynamic>> filtered = _emails;
+    if (_selectedIndex < 0 || _selectedIndex >= _emailCategories.length) {
+      return [];
+    }
+    List<Map<String, dynamic>> filtered = _emailCategories[_selectedIndex]['emails'];
     if (_searchQuery.isNotEmpty) {
       filtered = filtered.where((email) {
         bool match = false;
@@ -135,7 +179,7 @@ class _GmailHomePageState extends State<GmailHomePage> {
       }).toList();
     }
     if (_hasAttachment) {
-      filtered = filtered.where((email) => email['attachments'] == true).toList();
+      filtered = filtered.where((email) => email['hasAttachment'] == true).toList();
     }
     return filtered;
   }
@@ -171,17 +215,17 @@ class _GmailHomePageState extends State<GmailHomePage> {
     );
   }
 
-  void _openEmailDetails(int index) async {
+  void _openEmailDetails(Map<String, dynamic> email) async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => EmailDetailsDialog(
-        email: _emails[index],
+        email: email,
         labels: _labels,
       ),
     );
     if (result != null) {
       setState(() {
-        _emails[index] = result;
+        _emailCategories[_selectedIndex]['emails'][result['index']] = result;
       });
     }
   }
@@ -208,13 +252,22 @@ class _GmailHomePageState extends State<GmailHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final emailViewProvider = Provider.of<EmailViewProvider>(context);
+    final currentCategory = _selectedIndex >= 0 && _selectedIndex < _emailCategories.length
+        ? _emailCategories[_selectedIndex]
+        : _emailCategories[0]; // Default to Inbox if index is invalid
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
         elevation: 1,
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.black87),
+            icon: Icon(
+              Icons.menu,
+              color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+            ),
             onPressed: () {
               Scaffold.of(context).openDrawer();
             },
@@ -224,22 +277,22 @@ class _GmailHomePageState extends State<GmailHomePage> {
         title: Row(
           children: [
             const SizedBox(width: 8),
-            Image.network(
-              'https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png',
+            Image.asset(
+              'assets/gmail_logo.png',
               height: 32,
-              errorBuilder: (context, error, stackTrace) => const Icon(Icons.email, color: Colors.red),
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.email, color: Colors.red),
             ),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'Gmail',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w400,
-                color: Colors.black87,
+                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
               ),
             ),
             const SizedBox(width: 24),
-            // Responsive search bar
             Expanded(
               child: Center(
                 child: ConstrainedBox(
@@ -250,30 +303,54 @@ class _GmailHomePageState extends State<GmailHomePage> {
                         child: Container(
                           height: 40,
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[800]
+                                : Colors.grey[100],
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black12,
                                 blurRadius: 2,
-                                offset: Offset(0, 1),
+                                offset: const Offset(0, 1),
                               ),
                             ],
                           ),
                           child: TextField(
                             controller: _searchController,
-                            style: const TextStyle(fontSize: 16),
+                            style: TextStyle(
+                              color: themeProvider.isDarkMode
+                                  ? Colors.white
+                                  : Colors.black87,
+                            ),
                             decoration: InputDecoration(
                               hintText: 'Search mail',
-                              prefixIcon: const Icon(Icons.search, color: Colors.black54),
+                              hintStyle: TextStyle(
+                                color: themeProvider.isDarkMode
+                                    ? Colors.grey[400]
+                                    : Colors.grey[600],
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search,
+                                color: themeProvider.isDarkMode
+                                    ? Colors.grey[400]
+                                    : Colors.black54,
+                              ),
                               border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                             ),
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.tune, color: Colors.black54),
+                        icon: Icon(
+                          Icons.tune,
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.black54,
+                        ),
                         onPressed: _openAdvancedSearch,
                         tooltip: 'Advanced search',
                       ),
@@ -286,18 +363,29 @@ class _GmailHomePageState extends State<GmailHomePage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.black87),
-            onPressed: () {},
+            icon: Icon(
+              Icons.settings,
+              color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+            },
           ),
-          const CircleAvatar(
+          CircleAvatar(
             radius: 16,
-            backgroundColor: Colors.blue,
-            child: Text(
-              'U',
-              style: TextStyle(color: Colors.white),
+            backgroundColor: themeProvider.isDarkMode ? Colors.grey[800] : Colors.grey[200],
+            child: Image.asset(
+              'assets/images/avatar-default.png',
+              width: 32,
+              height: 32,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.person, size: 16, color: Colors.grey),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
         ],
       ),
       drawer: Drawer(
@@ -306,33 +394,48 @@ class _GmailHomePageState extends State<GmailHomePage> {
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
               ),
               child: Row(
                 children: [
                   Image.network(
                     'https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png',
                     height: 32,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.email, color: Colors.red),
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.email, color: Colors.red),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
+                  Text(
                     'Gmail',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w400,
-                      color: Colors.black87,
+                      color: themeProvider.isDarkMode
+                          ? Colors.white
+                          : Colors.black87,
                     ),
                   ),
                 ],
               ),
             ),
-            // Show first 5 items, then More/Less, then the rest if expanded
-            ..._buildDrawerListTiles(),
+            ..._buildDrawerListTiles(themeProvider),
             const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Text('Categories', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            // View Mode Toggle
+            SwitchListTile(
+              title: const Text('Detailed View'),
+              subtitle: const Text('Show email previews and attachments'),
+              secondary: Icon(
+                emailViewProvider.isDetailedView
+                    ? Icons.view_agenda
+                    : Icons.view_list,
+                color: emailViewProvider.isDetailedView
+                    ? Colors.blue
+                    : Colors.grey,
+              ),
+              value: emailViewProvider.isDetailedView,
+              onChanged: (bool value) {
+                emailViewProvider.toggleViewMode();
+              },
             ),
           ],
         ),
@@ -342,9 +445,12 @@ class _GmailHomePageState extends State<GmailHomePage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
+              color: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
               border: Border(
                 bottom: BorderSide(
-                  color: Colors.grey[300]!,
+                  color: themeProvider.isDarkMode
+                      ? Colors.grey[800]!
+                      : Colors.grey[300]!,
                   width: 1,
                 ),
               ),
@@ -372,37 +478,11 @@ class _GmailHomePageState extends State<GmailHomePage> {
               itemCount: _filteredEmails.length,
               itemBuilder: (context, index) {
                 final email = _filteredEmails[index];
-                // Find the original index in _emails to sync checked state
-                final originalIndex = _emails.indexOf(email);
                 return InkWell(
-                  onTap: () => _openEmailDetails(originalIndex),
-                  child: EmailListItem(
-                    sender: email['sender'],
-                    subject: email['subject'],
-                    preview: email['preview'],
-                    time: email['time'],
-                    isRead: email['isRead'],
-                    isStarred: email['isStarred'],
-                    isChecked: _checkedEmails[originalIndex],
-                    onChecked: (checked) {
-                      setState(() {
-                        _checkedEmails[originalIndex] = checked ?? false;
-                      });
-                    },
-                    onReply: () {
-                      _openCompose(
-                        to: email['sender'],
-                        subject: 'Re: ${email['subject']}',
-                        body: '\n\nOn ${email['time']}, ${email['sender']} wrote:\n${email['body']}',
-                      );
-                    },
-                    onForward: () {
-                      _openCompose(
-                        subject: 'Fwd: ${email['subject']}',
-                        body: '\n\n---------- Forwarded message ----------\nFrom: ${email['sender']}\nDate: ${email['time']}\nSubject: ${email['subject']}\n\n${email['body']}',
-                      );
-                    },
-                  ),
+                  onTap: () => _openEmailDetails(email),
+                  child: emailViewProvider.isDetailedView
+                      ? _buildDetailedEmailItem(email)
+                      : _buildBasicEmailItem(email),
                 );
               },
             ),
@@ -418,22 +498,117 @@ class _GmailHomePageState extends State<GmailHomePage> {
     );
   }
 
-  List<Widget> _buildDrawerListTiles() {
+  Widget _buildDetailedEmailItem(Map<String, dynamic> email) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: email['isStarred'] ? Colors.amber : Colors.grey,
+          child: Text(
+            email['sender'][0].toUpperCase(),
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+        title: Text(
+          email['sender'],
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              email['subject'],
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              email['preview'],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white60 : Colors.black54,
+              ),
+            ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              email['time'],
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+              ),
+            ),
+            if (email['hasAttachment'])
+              Icon(
+                Icons.attach_file,
+                size: 16,
+                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+              ),
+          ],
+        ),
+        isThreeLine: true,
+      ),
+    );
+  }
+
+  Widget _buildBasicEmailItem(Map<String, dynamic> email) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: email['isStarred'] ? Colors.amber : Colors.grey,
+        child: Text(
+          email['sender'][0].toUpperCase(),
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+      title: Text(
+        email['sender'],
+        style: TextStyle(
+          color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+        ),
+      ),
+      subtitle: Text(
+        email['subject'],
+        style: TextStyle(
+          color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+        ),
+      ),
+      trailing: Text(
+        email['time'],
+        style: TextStyle(
+          color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildDrawerListTiles(ThemeProvider themeProvider) {
     List<Widget> tiles = [];
-    int showCount = _showAllDrawerItems ? _drawerItems.length : 5;
+    int showCount = _showAllDrawerItems ? _emailCategories.length : 5;
 
     for (int i = 0; i < showCount; i++) {
+      final category = _emailCategories[i];
       tiles.add(
         ListTile(
-          leading: Icon(_drawerItems[i]['icon']),
-          title: Text(_drawerItems[i]['title']),
+          leading: Icon(category['icon']),
+          title: Text(category['name']),
           selected: _selectedIndex == i,
           onTap: () {
             setState(() => _selectedIndex = i);
             Navigator.pop(context);
           },
-          trailing: _drawerItems[i]['trailing'] != null
-              ? Text(_drawerItems[i]['trailing'], style: TextStyle(color: Colors.grey))
+          trailing: category['count'] != null
+              ? Text(category['count'], style: TextStyle(color: Colors.grey))
               : null,
         ),
       );
@@ -463,24 +638,24 @@ class _GmailHomePageState extends State<GmailHomePage> {
           },
         ),
       );
-      // Add the rest of the items if expanded
-      for (int i = 5; i < _drawerItems.length; i++) {
-        tiles.add(
-          ListTile(
-            leading: Icon(_drawerItems[i]['icon']),
-            title: Text(_drawerItems[i]['title']),
-            selected: _selectedIndex == i,
-            onTap: () {
-              setState(() => _selectedIndex = i);
-              Navigator.pop(context);
-            },
-            trailing: _drawerItems[i]['trailing'] != null
-                ? Text(_drawerItems[i]['trailing'], style: TextStyle(color: Colors.grey))
-                : null,
-          ),
-        );
-      }
     }
+
+    // Add Manage Labels section
+    tiles.add(const Divider());
+    tiles.add(
+      ListTile(
+        leading: const Icon(Icons.label),
+        title: const Text('Manage Labels'),
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const LabelManagementPage()),
+          );
+        },
+      ),
+    );
+
     return tiles;
   }
 

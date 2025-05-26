@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
 
 class ComposeMailDialog extends StatefulWidget {
   final String? to;
   final String? subject;
   final String? body;
-  final void Function(Map<String, dynamic> draft)? onDraft;
-  const ComposeMailDialog({super.key, this.to, this.subject, this.body, this.onDraft});
+  final Function(Map<String, dynamic>) onDraft;
+
+  const ComposeMailDialog({
+    super.key,
+    this.to,
+    this.subject,
+    this.body,
+    required this.onDraft,
+  });
 
   @override
   State<ComposeMailDialog> createState() => _ComposeMailDialogState();
@@ -29,14 +38,14 @@ class _ComposeMailDialogState extends State<ComposeMailDialog> {
   @override
   void initState() {
     super.initState();
+    _toController.text = widget.to ?? '';
+    _subjectController.text = widget.subject ?? '';
     _quillController = widget.body != null && widget.body!.isNotEmpty
         ? quill.QuillController(
             document: quill.Document()..insert(0, widget.body!),
             selection: const TextSelection.collapsed(offset: 0),
           )
         : quill.QuillController.basic();
-    _toController.text = widget.to ?? '';
-    _subjectController.text = widget.subject ?? '';
   }
 
   Future<void> _pickFiles() async {
@@ -56,257 +65,156 @@ class _ComposeMailDialogState extends State<ComposeMailDialog> {
 
   @override
   void dispose() {
-    if (!_sent && widget.onDraft != null) {
+    if (!_sent) {
       final draft = {
         'to': _toController.text,
         'subject': _subjectController.text,
         'body': _quillController.document.toPlainText(),
       };
       if (draft['to']!.isNotEmpty || draft['subject']!.isNotEmpty || draft['body']!.trim().isNotEmpty) {
-        widget.onDraft!(draft);
+        widget.onDraft(draft);
       }
     }
+    _toController.dispose();
+    _ccController.dispose();
+    _bccController.dispose();
+    _subjectController.dispose();
+    _quillController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return Dialog(
-      insetPadding: const EdgeInsets.only(bottom: 24, right: 24, left: 24, top: 80),
-      backgroundColor: Colors.transparent,
-      child: Align(
-        alignment: Alignment.bottomRight,
-        child: Container(
-          width: 540,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 16,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: const BoxDecoration(
-                  color: Color(0xfff5f7fa),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+      backgroundColor: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.8,
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Header
+            Row(
+              children: [
+                Text(
+                  'New Message',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Text('New Message', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.remove, size: 18),
-                      tooltip: 'Minimize',
-                      onPressed: () {},
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.open_in_full, size: 18),
-                      tooltip: 'Fullscreen',
-                      onPressed: () {},
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
+                const Spacer(),
+                IconButton(
+                  icon: Icon(
+                    Icons.close,
+                    color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(),
+            // To Field
+            TextField(
+              controller: _toController,
+              decoration: InputDecoration(
+                labelText: 'To',
+                border: const OutlineInputBorder(),
+                fillColor: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+                filled: true,
+                labelStyle: TextStyle(
+                  color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
                 ),
               ),
-              // Recipient Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                child: Row(
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Subject Field
+            TextField(
+              controller: _subjectController,
+              decoration: InputDecoration(
+                labelText: 'Subject',
+                border: const OutlineInputBorder(),
+                fillColor: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+                filled: true,
+                labelStyle: TextStyle(
+                  color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Quill Editor
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: themeProvider.isDarkMode ? Colors.grey[700]! : Colors.grey[300]!,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Column(
                   children: [
+                    quill.QuillSimpleToolbar(
+                      controller: _quillController,
+                    ),
                     Expanded(
-                      child: TextField(
-                        controller: _toController,
-                        decoration: const InputDecoration(
-                          hintText: 'To',
-                          border: InputBorder.none,
-                          isDense: true,
+                      child: Container(
+                        color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+                        child: quill.QuillEditor(
+                          controller: _quillController,
+                          scrollController: ScrollController(),
+                          focusNode: FocusNode(),
                         ),
                       ),
-                    ),
-                    GestureDetector(
-                      onTap: () => setState(() => _showCc = !_showCc),
-                      child: Text('Cc', style: TextStyle(color: Colors.blue[900], fontWeight: FontWeight.w500)),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => setState(() => _showBcc = !_showBcc),
-                      child: Text('Bcc', style: TextStyle(color: Colors.blue[900], fontWeight: FontWeight.w500)),
                     ),
                   ],
                 ),
               ),
-              if (_showCc)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  child: TextField(
-                    controller: _ccController,
-                    decoration: const InputDecoration(
-                      hintText: 'Cc',
-                      border: InputBorder.none,
-                      isDense: true,
+            ),
+            const SizedBox(height: 16),
+            // Action Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    widget.onDraft({
+                      'to': _toController.text,
+                      'subject': _subjectController.text,
+                      'body': _quillController.document.toPlainText(),
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    'Save as Draft',
+                    style: TextStyle(
+                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
                     ),
                   ),
                 ),
-              if (_showBcc)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  child: TextField(
-                    controller: _bccController,
-                    decoration: const InputDecoration(
-                      hintText: 'Bcc',
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    // TODO: Implement send functionality
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeProvider.isDarkMode ? Colors.blue[700] : Colors.blue,
+                    foregroundColor: Colors.white,
                   ),
+                  child: const Text('Send'),
                 ),
-              // Subject Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                child: TextField(
-                  controller: _subjectController,
-                  decoration: const InputDecoration(
-                    hintText: 'Subject',
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                ),
-              ),
-              // Body
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                child: Container(
-                  height: 180,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: quill.QuillEditor.basic(
-                    controller: _quillController,
-                    config: const quill.QuillEditorConfig(),
-                  ),
-                ),
-              ),
-              if (_attachments.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: List.generate(_attachments.length, (index) {
-                      final file = _attachments[index];
-                      return Chip(
-                        label: Text(file.name),
-                        onDeleted: () => _removeAttachment(index),
-                        avatar: const Icon(Icons.attach_file, size: 18),
-                      );
-                    }),
-                  ),
-                ),
-              // Bottom Toolbar & Action Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Send button and dropdown
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _sent = true;
-                        });
-                        Navigator.of(context).pop();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                        textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      child: const Text('Send'),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.arrow_drop_down),
-                      onPressed: () {},
-                      tooltip: 'More send options',
-                    ),
-                    // Toolbar icons
-                    IconButton(
-                      icon: const Icon(Icons.attach_file),
-                      onPressed: _pickFiles,
-                      tooltip: 'Attach files',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.format_bold),
-                      onPressed: () {},
-                      tooltip: 'Formatting',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.insert_emoticon),
-                      onPressed: () {},
-                      tooltip: 'Emoji',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.link),
-                      onPressed: () {},
-                      tooltip: 'Insert link',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.image),
-                      onPressed: () {},
-                      tooltip: 'Insert image',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.lock),
-                      onPressed: () {},
-                      tooltip: 'Confidential mode',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () {},
-                      tooltip: 'Pen',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () {},
-                      tooltip: 'More',
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: 'Discard',
-                    ),
-                  ],
-                ),
-              ),
-              // Formatting toolbar (moved to bottom, below action row)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                child: quill.QuillSimpleToolbar(
-                  controller: _quillController,
-                  config: const quill.QuillSimpleToolbarConfig(),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );
