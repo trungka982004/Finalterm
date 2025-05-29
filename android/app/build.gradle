@@ -1,0 +1,23 @@
+android {
+    // ... existing code ...
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+        // ... existing code ...
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+        // ... existing code ...
+    }
+    // ... existing code ...
+}
+
+dependencies {
+    // ... existing code ...
+
+    implementation "androidx.multidex:multidex:2.0.1"
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
+    // ... existing code ...
+} 

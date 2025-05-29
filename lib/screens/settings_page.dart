@@ -52,360 +52,397 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       body: ListView(
         children: [
-          // Profile Management Section
-          ListTile(
-            title: Text(
-              'Profile Management',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: themeProvider.isDarkMode ? Colors.white : Colors.blue,
-              ),
-            ),
-          ),
-          // Profile Card
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(16),
-              leading: CircleAvatar(
-                radius: 30,
-                backgroundColor: themeProvider.isDarkMode ? Colors.grey[700] : Colors.grey[200],
-                child: Image.asset(
-                  'assets/images/avatar-default.png',
-                  width: 60,
-                  height: 60,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.person, size: 30, color: Colors.grey),
-                ),
-              ),
-              title: Text(
-                _name,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-                ),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _email,
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-                    ),
-                  ),
-                  Text(
-                    _phoneNumber,
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white60 : Colors.black45,
-                    ),
-                  ),
-                ],
-              ),
-              trailing: IconButton(
-                icon: Icon(
-                  Icons.edit,
-                  color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
-                ),
-                onPressed: () => _showEditProfileDialog(),
-              ),
-            ),
-          ),
-          const Divider(),
-          // Account Management Section
-          ListTile(
-            title: Text(
-              'Account Management',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: themeProvider.isDarkMode ? Colors.white : Colors.blue,
-              ),
-            ),
-          ),
-          // Change Password
-          ListTile(
-            leading: Icon(
-              Icons.lock,
-              color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
-            ),
-            title: Text(
-              'Change Password',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => _showChangePasswordDialog(),
-          ),
-          // Password Recovery
-          ListTile(
-            leading: Icon(
-              Icons.security,
-              color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
-            ),
-            title: Text(
-              'Password Recovery',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => _showPasswordRecoveryDialog(),
-          ),
-          // Two-Step Verification
-          SwitchListTile(
-            title: Text(
-              'Two-Step Verification',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              'Add an extra layer of security',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            secondary: Icon(
-              _twoStepVerificationEnabled
-                  ? Icons.verified_user
-                  : Icons.verified_user_outlined,
-              color: _twoStepVerificationEnabled
-                  ? Colors.green
-                  : (themeProvider.isDarkMode ? Colors.white70 : Colors.grey),
-            ),
-            value: _twoStepVerificationEnabled,
-            onChanged: (bool value) {
-              setState(() {
-                _twoStepVerificationEnabled = value;
-              });
-              if (value) {
-                _showTwoStepVerificationSetupDialog();
-              }
-            },
-          ),
-          const Divider(),
-          // Theme Switch
-          SwitchListTile(
-            title: Text(
-              'Dark Mode',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              'Toggle dark/light theme',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            secondary: Icon(
-              themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-              color: themeProvider.isDarkMode ? Colors.amber : Colors.grey,
-            ),
-            value: themeProvider.isDarkMode,
-            onChanged: (bool value) {
-              themeProvider.toggleTheme();
-            },
-          ),
-          // Notifications Switch
-          SwitchListTile(
-            title: Text(
-              'Notifications',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              'Enable/disable notifications',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            secondary: Icon(
-              _notificationsEnabled
-                  ? Icons.notifications_active
-                  : Icons.notifications_off,
-              color: _notificationsEnabled
-                  ? Colors.blue
-                  : (themeProvider.isDarkMode ? Colors.white70 : Colors.grey),
-            ),
-            value: _notificationsEnabled,
-            onChanged: (bool value) {
-              setState(() {
-                _notificationsEnabled = value;
-              });
-            },
-          ),
-          const Divider(),
-          // Email Editor Preferences Section
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-            child: Text(
-              'Email Editor Preferences',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: themeProvider.isDarkMode ? Colors.white : Colors.blue,
-              ),
-            ),
-          ),
-          // Font Size Slider
-          ListTile(
-            title: Text(
-              'Font Size',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              '${_fontSize.toStringAsFixed(1)}',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            leading: Icon(
-              Icons.format_size,
-              color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+          // Profile Management Section (like Profile page header)
+          Container(
+            padding: const EdgeInsets.all(24),
+            color: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+            child: Column(
               children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.remove,
-                    color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                GestureDetector(
+                  onTap: () => _showEditProfileDialog(),
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: themeProvider.isDarkMode ? Colors.grey[800] : Colors.grey[200],
+                        child: Image.asset(
+                          'assets/images/avatar-default.png',
+                          width: 100,
+                          height: 100,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.person, size: 50, color: Colors.grey),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: themeProvider.isDarkMode ? Colors.grey[900]! : Colors.white,
+                              width: 2,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.edit,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  onPressed: () {
-                    if (_fontSize > 12) {
-                      setState(() => _fontSize -= 1);
-                    }
-                  },
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.add,
-                    color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                const SizedBox(height: 16),
+                Text(
+                  _name,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
                   ),
-                  onPressed: () {
-                    if (_fontSize < 24) {
-                      setState(() => _fontSize += 1);
-                    }
-                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _email,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _phoneNumber,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: themeProvider.isDarkMode ? Colors.white60 : Colors.black45,
+                  ),
                 ),
               ],
             ),
           ),
-          // Font Family Dropdown
-          ListTile(
-            title: Text(
-              'Font Family',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              _selectedFontFamily,
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            leading: Icon(
-              Icons.font_download,
-              color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
-            ),
-            trailing: DropdownButton<String>(
-              value: _selectedFontFamily,
-              items: _fontFamilies.map((String font) {
-                return DropdownMenuItem<String>(
-                  value: font,
-                  child: Text(
-                    font,
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+          const Divider(),
+
+          // General Settings Card
+          Card(
+             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+             color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                 Padding(
+                   padding: const EdgeInsets.all(16),
+                   child: Text(
+                      'GENERAL',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.blue,
+                      ),
                     ),
                   ),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    _selectedFontFamily = newValue;
-                  });
-                }
-              },
-            ),
+                  SwitchListTile(
+                    title: Text(
+                      'Notifications',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    secondary: Icon(
+                      _notificationsEnabled
+                          ? Icons.notifications_active
+                          : Icons.notifications_none,
+                      color: _notificationsEnabled
+                          ? Colors.blue
+                          : (themeProvider.isDarkMode ? Colors.white70 : Colors.grey),
+                    ),
+                    value: _notificationsEnabled,
+                    onChanged: (bool value) {
+                      setState(() {
+                        _notificationsEnabled = value;
+                      });
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      Icons.brightness_6_outlined,
+                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                    ),
+                    title: Text(
+                      'Dark Mode',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    trailing: Switch(
+                      value: themeProvider.isDarkMode,
+                      onChanged: (bool value) {
+                        themeProvider.toggleTheme();
+                      },
+                    ),
+                  ),
+              ]
+            )
           ),
-          // Auto Answer Switch
-          SwitchListTile(
-            title: Text(
-              'Auto Answer Mode',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              'Automatically generate email responses',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            secondary: Icon(
-              _autoAnswerEnabled ? Icons.auto_awesome : Icons.auto_awesome_motion,
-              color: _autoAnswerEnabled
-                  ? Colors.green
-                  : (themeProvider.isDarkMode ? Colors.white70 : Colors.grey),
-            ),
-            value: _autoAnswerEnabled,
-            onChanged: (bool value) {
-              setState(() {
-                _autoAnswerEnabled = value;
-              });
-              final autoAnswerProvider = Provider.of<AutoAnswerProvider>(context, listen: false);
-              autoAnswerProvider.toggleAutoAnswer(value);
-            },
+
+          // Account Management Card
+          Card(
+             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+             color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                 Padding(
+                   padding: const EdgeInsets.all(16),
+                   child: Text(
+                      'Account Management',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.blue,
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      Icons.lock,
+                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                    ),
+                    title: Text(
+                      'Change Password',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () => _showChangePasswordDialog(),
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      Icons.security,
+                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                    ),
+                    title: Text(
+                      'Password Recovery',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () => _showPasswordRecoveryDialog(),
+                  ),
+                  SwitchListTile(
+                    title: Text(
+                      'Two-Step Verification',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Add an extra layer of security',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                    secondary: Icon(
+                      _twoStepVerificationEnabled
+                          ? Icons.verified_user
+                          : Icons.verified_user_outlined,
+                      color: _twoStepVerificationEnabled
+                          ? Colors.green
+                          : (themeProvider.isDarkMode ? Colors.white70 : Colors.grey),
+                    ),
+                    value: _twoStepVerificationEnabled,
+                    onChanged: (bool value) {
+                      setState(() {
+                        _twoStepVerificationEnabled = value;
+                      });
+                      if (value) {
+                        _showTwoStepVerificationSetupDialog();
+                      }
+                    },
+                  ),
+              ]
+            )
           ),
-          // Customize Auto-Answer Message Button
-          if (_autoAnswerEnabled)
-            ListTile(
+
+          // Email Editor Preferences Card
+          Card(
+             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+             color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                 Padding(
+                   padding: const EdgeInsets.all(16),
+                   child: Text(
+                      'Email Editor Preferences',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.blue,
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    title: Text(
+                      'Font Size',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${_fontSize.toStringAsFixed(1)}',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                    leading: Icon(
+                      Icons.format_size,
+                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.remove,
+                            color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                          ),
+                          onPressed: () {
+                            if (_fontSize > 12) {
+                              setState(() => _fontSize -= 1);
+                            }
+                          },
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.add,
+                            color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                          ),
+                          onPressed: () {
+                            if (_fontSize < 24) {
+                              setState(() => _fontSize += 1);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  ListTile(
+                    title: Text(
+                      'Font Family',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _selectedFontFamily,
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                    leading: Icon(
+                      Icons.font_download,
+                      color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                    ),
+                    trailing: DropdownButton<String>(
+                      value: _selectedFontFamily,
+                      items: _fontFamilies.map((String font) {
+                        return DropdownMenuItem<String>(
+                          value: font,
+                          child: Text(
+                            font,
+                            style: TextStyle(
+                              color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _selectedFontFamily = newValue;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  SwitchListTile(
+                    title: Text(
+                      'Auto Answer Mode',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Automatically generate email responses',
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                    secondary: Icon(
+                      _autoAnswerEnabled ? Icons.auto_awesome : Icons.auto_awesome_motion,
+                      color: _autoAnswerEnabled
+                          ? Colors.green
+                          : (themeProvider.isDarkMode ? Colors.white70 : Colors.grey),
+                    ),
+                    value: _autoAnswerEnabled,
+                    onChanged: (bool value) {
+                      setState(() {
+                        _autoAnswerEnabled = value;
+                      });
+                      final autoAnswerProvider = Provider.of<AutoAnswerProvider>(context, listen: false);
+                      autoAnswerProvider.toggleAutoAnswer(value);
+                    },
+                  ),
+                  if (_autoAnswerEnabled)
+                    ListTile(
+                      leading: Icon(
+                        Icons.edit,
+                        color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                      ),
+                      title: Text(
+                        'Customize Auto-Reply Message',
+                        style: TextStyle(
+                          color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => const AutoAnswerDialog(),
+                        );
+                      },
+                    ),
+              ]
+            )
+          ),
+
+          // Sign Out Card
+          Card(
+             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+             color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.white,
+            child: ListTile(
               leading: Icon(
-                Icons.edit,
-                color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
+                Icons.logout,
+                color: themeProvider.isDarkMode ? Colors.white70 : Colors.red[400],
               ),
               title: Text(
-                'Customize Auto-Reply Message',
+                'Sign Out',
                 style: TextStyle(
-                  color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.red[400],
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => const AutoAnswerDialog(),
-                );
+                // TODO: Implement sign out logic
+                Navigator.pop(context);
               },
             ),
-          const Divider(),
-          // Sign Out Button
-          ListTile(
-            leading: Icon(
-              Icons.logout,
-              color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey,
-            ),
-            title: Text(
-              'Sign Out',
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            onTap: () {
-              // TODO: Implement sign out logic
-              Navigator.pop(context);
-            },
           ),
         ],
       ),

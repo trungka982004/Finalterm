@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
 
 class LabelManagementPage extends StatefulWidget {
   const LabelManagementPage({super.key});
@@ -8,6 +10,9 @@ class LabelManagementPage extends StatefulWidget {
 }
 
 class _LabelManagementPageState extends State<LabelManagementPage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   final List<Map<String, dynamic>> _labels = [
     {
       'name': 'Important',
@@ -58,93 +63,33 @@ class _LabelManagementPageState extends State<LabelManagementPage> {
     Colors.indigo,
   ];
 
+  List<Map<String, dynamic>> get _filteredLabels {
+    if (_searchQuery.isEmpty) {
+      return _labels;
+    } else {
+      return _labels
+          .where((label) => label['name'].toLowerCase().contains(_searchQuery.toLowerCase()))
+          .toList();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Labels'),
-        backgroundColor: Colors.white,
-        elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.blue),
-            onPressed: () => _showAddEditLabelDialog(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search labels',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                filled: true,
-                fillColor: Colors.grey[100],
-              ),
-            ),
-          ),
-          // Labels List
-          Expanded(
-            child: ListView.builder(
-              itemCount: _labels.length,
-              itemBuilder: (context, index) {
-                final label = _labels[index];
-                return Dismissible(
-                  key: Key(label['name']),
-                  background: Container(
-                    color: Colors.red,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 16),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  direction: DismissDirection.endToStart,
-                  onDismissed: (direction) {
-                    setState(() {
-                      _labels.removeAt(index);
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${label['name']} deleted')),
-                    );
-                  },
-                  child: InkWell(
-                    onTap: () => _showEmailsDialog(label),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: label['color'],
-                        child: Text(
-                          label['name'][0].toUpperCase(),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      title: Text(label['name']),
-                      subtitle: Text('${label['emailCount']} emails'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _showAddEditLabelDialog(label: label),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddEditLabelDialog(),
-        child: const Icon(Icons.add),
-      ),
-    );
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text;
+    });
   }
 
   void _showEmailsDialog(Map<String, dynamic> label) {
@@ -307,6 +252,100 @@ class _LabelManagementPageState extends State<LabelManagementPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manage Labels'),
+        backgroundColor: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+        elevation: 1,
+        iconTheme: IconThemeData(
+          color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+        ),
+      ),
+      body: Column(
+        children: [
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search labels',
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: themeProvider.isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                hintStyle: TextStyle(
+                   color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
+          ),
+          // Labels List
+          Expanded(
+            child: ListView.builder(
+              itemCount: _filteredLabels.length,
+              itemBuilder: (context, index) {
+                final label = _filteredLabels[index];
+                return Dismissible(
+                  key: Key(label['name']),
+                  background: Container(
+                    color: Colors.red,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 16),
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  direction: DismissDirection.endToStart,
+                  onDismissed: (direction) {
+                    setState(() {
+                      _labels.removeWhere((item) => item['name'] == label['name']);
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${label['name']} deleted')),
+                    );
+                  },
+                  child: InkWell(
+                    onTap: () => _showEmailsDialog(label),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: label['color'],
+                        child: Text(
+                          label['name'][0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      title: Text(label['name']),
+                      subtitle: Text('${label['emailCount']} emails'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _showAddEditLabelDialog(label: label),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddEditLabelDialog(),
+        child: const Icon(Icons.add),
       ),
     );
   }
