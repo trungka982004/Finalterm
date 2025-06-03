@@ -1,25 +1,17 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken'); // Keep for signing tokens
 const speakeasy = require('speakeasy');
 const User = require('../models/User');
 const axios = require('axios');
 const EmailJS = require('@emailjs/nodejs');
 const router = express.Router();
 
-const authenticateJWT = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access denied, no token provided' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    res.status(403).json({ error: 'Invalid token' });
-  }
-};
+// Import shared middleware and validation
+const authenticateJWT = require('../utils/authMiddleware'); // Using shared middleware
+const { isValidEmail } = require('../utils/validation'); // Using shared validation
 
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+// Note: authenticateJWT is now imported. If there was a local definition, it's replaced.
 
 router.post('/register', async (req, res) => {
   const { name, phone, password, captchaToken } = req.body;
@@ -140,7 +132,7 @@ router.put('/profile/:userId', authenticateJWT, async (req, res) => {
 
     if (name) user.name = name;
     if (email) {
-      if (!isValidEmail(email)) return res.status(400).json({ error: 'Invalid email format' });
+      if (!isValidEmail(email)) return res.status(400).json({ error: 'Invalid email format' }); // isValidEmail still used here
       const existingUser = await User.findOne({ email, _id: { $ne: userId } });
       if (existingUser) return res.status(400).json({ error: 'Email already in use' });
       user.email = email;
@@ -170,18 +162,20 @@ router.post('/change-avatar/:userId', authenticateJWT, async (req, res) => {
     io.to(userId).emit('profileUpdated', { avatar: avatarUrl });
 
     res.json({ message: 'Avatar updated successfully' });
-  } catch (error) {
+  } catch (error)
+    {
     res.status(500).json({ error: error.message });
   }
 });
 
 router.post('/change-password', authenticateJWT, async (req, res) => {
-  const { userId, oldPassword, newPassword } = req.body;
-  if (req.user.userId !== userId) {
+  // Renamed req.body.userId to currentUserId to avoid confusion with req.user.userId
+  const { userId: targetUserId, oldPassword, newPassword } = req.body;
+  if (req.user.userId !== targetUserId) {
     return res.status(403).json({ error: 'Unauthorized access' });
   }
   try {
-    const user = await User.findById(userId);
+    const user = await User.findById(targetUserId);
     if (!user || !(await bcrypt.compare(oldPassword, user.password))) {
       return res.status(400).json({ error: 'Invalid old password' });
     }
@@ -196,36 +190,39 @@ router.post('/change-password', authenticateJWT, async (req, res) => {
 
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
-  if (!isValidEmail(email)) {
+  if (!isValidEmail(email)) { // isValidEmail used here
     return res.status(400).json({ error: 'Invalid email format' });
   }
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ error: 'Email not found' });
+      // To prevent user enumeration, consider a generic message even if email not found
+      // return res.status(400).json({ error: 'Email not found' });
+      return res.json({ message: 'If your email is in our system, OTP will be sent.' });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
-    user.otpExpires = Date.now() + 10 * 60 * 1000;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     await user.save();
 
     await EmailJS.send(
       process.env.EMAILJS_SERVICE_ID,
       process.env.EMAILJS_TEMPLATE_ID,
-      { otp, to_email: email },
-      { publicKey: process.env.EMAILJS_USER_ID }
+      { otp, to_email: email }, // Ensure your EmailJS template uses these variables
+      { publicKey: process.env.EMAILJS_USER_ID, privateKey: process.env.EMAILJS_PRIVATE_KEY } // privateKey if needed by your EmailJS setup
     );
 
     res.json({ message: 'OTP sent to email' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Forgot password error:', error); // Log the actual error
+    res.status(500).json({ error: 'Failed to send OTP. ' + error.message });
   }
 });
 
 router.post('/verify-otp', async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  if (!isValidEmail(email)) {
+  if (!isValidEmail(email)) { // isValidEmail used here
     return res.status(400).json({ error: 'Invalid email format' });
   }
   try {

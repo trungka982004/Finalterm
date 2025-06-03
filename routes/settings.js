@@ -2,17 +2,8 @@ const express = require('express');
 const User = require('../models/User');
 const router = express.Router();
 
-const authenticateJWT = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access denied, no token provided' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    res.status(403).json({ error: 'Invalid token' });
-  }
-};
+// Import shared middleware
+const authenticateJWT = require('../utils/authMiddleware');
 
 router.get('/:userId', authenticateJWT, async (req, res) => {
   const { userId } = req.params;
@@ -38,12 +29,21 @@ router.put('/:userId', authenticateJWT, async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    if (notificationSettings) user.notificationSettings = notificationSettings;
+    if (notificationSettings) {
+        // Add more specific validation for notificationSettings structure if needed
+        user.notificationSettings = { ...user.notificationSettings, ...notificationSettings };
+    }
     if (autoAnswerEnabled !== undefined) user.autoAnswerEnabled = autoAnswerEnabled;
-    if (autoAnswerMessage) user.autoAnswerMessage = autoAnswerMessage;
+    if (autoAnswerMessage !== undefined) user.autoAnswerMessage = autoAnswerMessage; // Allow empty string
     await user.save();
 
-    res.json({ message: 'Settings updated successfully' });
+    // Return the updated user settings
+    const updatedUserSettings = {
+        notificationSettings: user.notificationSettings,
+        autoAnswerEnabled: user.autoAnswerEnabled,
+        autoAnswerMessage: user.autoAnswerMessage,
+    };
+    res.json({ message: 'Settings updated successfully', settings: updatedUserSettings });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
