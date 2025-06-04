@@ -7,61 +7,81 @@ const axios = require('axios');
 const EmailJS = require('@emailjs/nodejs');
 const router = express.Router();
 
-const authenticateJWT = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access denied, no token provided' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    res.status(403).json({ error: 'Invalid token' });
-  }
-};
-
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+// Import shared middleware and validation
+const authenticateJWT = require('../utils/authMiddleware');
+const { isValidEmail } = require('../utils/validation');
 
 router.post('/register', async (req, res) => {
   const { name, phone, password, captchaToken } = req.body;
   try {
-    const captchaResponse = await axios.post(
-      `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaToken}`
-    );
-    if (!captchaResponse.data.success) {
-      return res.status(400).json({ error: 'Invalid CAPTCHA' });
+    // Validate input
+    if (!name || !phone || !password || !captchaToken) {
+      return res.status(400).json({ error: 'Missing required fields: name, phone, password, or captchaToken' });
     }
 
+    // Verify reCAPTCHA v2
+    const captchaResponse = await axios.post(
+      `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaToken}`,
+      {},
+      { timeout: 5000 } // Add timeout to prevent hanging
+    );
+    if (!captchaResponse.data.success) {
+      console.error('reCAPTCHA v2 verification failed:', captchaResponse.data);
+      return res.status(400).json({ 
+        error: 'Invalid reCAPTCHA v2 verification',
+        details: captchaResponse.data['error-codes'] || 'Unknown error'
+      });
+    }
+
+    // Check for existing user
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
       return res.status(400).json({ error: 'Phone number already exists' });
     }
 
+    // Hash password and save user
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ name, phone, password: hashedPassword });
     await user.save();
 
+    // Generate JWT
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token, userId: user._id });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Register endpoint error:', error);
+    res.status(500).json({ error: 'Server error during registration', details: error.message });
   }
 });
 
 router.post('/login', async (req, res) => {
   const { phone, password, captchaToken, twoFactorCode } = req.body;
   try {
-    const captchaResponse = await axios.post(
-      `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaToken}`
-    );
-    if (!captchaResponse.data.success) {
-      return res.status(400).json({ error: 'Invalid CAPTCHA' });
+    // Validate input
+    if (!phone || !password || !captchaToken) {
+      return res.status(400).json({ error: 'Missing required fields: phone, password, or captchaToken' });
     }
 
+    // Verify reCAPTCHA v2
+    const captchaResponse = await axios.post(
+      `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaToken}`,
+      {},
+      { timeout: 5000 }
+    );
+    if (!captchaResponse.data.success) {
+      console.error('reCAPTCHA v2 verification failed:', captchaResponse.data);
+      return res.status(400).json({ 
+        error: 'Invalid reCAPTCHA v2 verification',
+        details: captchaResponse.data['error-codes'] || 'Unknown error'
+      });
+    }
+
+    // Authenticate user
     const user = await User.findOne({ phone });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
+    // Verify 2FA if enabled
     if (user.twoFactorEnabled) {
       if (!twoFactorCode) {
         return res.status(400).json({ error: 'Two-factor code required' });
@@ -76,10 +96,12 @@ router.post('/login', async (req, res) => {
       }
     }
 
+    // Generate JWT
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token, userId: user._id });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Login endpoint error:', error);
+    res.status(500).json({ error: 'Server error during login', details: error.message });
   }
 });
 
@@ -95,7 +117,8 @@ router.post('/enable-2fa', authenticateJWT, async (req, res) => {
 
     res.json({ message: 'Two-factor authentication enabled', secret: secret.base32 });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Enable 2FA error:', error);
+    res.status(500).json({ error: 'Server error enabling 2FA', details: error.message });
   }
 });
 
@@ -110,7 +133,8 @@ router.post('/disable-2fa', authenticateJWT, async (req, res) => {
 
     res.json({ message: 'Two-factor authentication disabled' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Disable 2FA error:', error);
+    res.status(500).json({ error: 'Server error disabling 2FA', details: error.message });
   }
 });
 
@@ -124,7 +148,8 @@ router.get('/profile/:userId', authenticateJWT, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ error: 'Server error fetching profile', details: error.message });
   }
 });
 
@@ -132,7 +157,7 @@ router.put('/profile/:userId', authenticateJWT, async (req, res) => {
   const { userId } = req.params;
   const { name, email } = req.body;
   if (req.user.userId !== userId) {
-    return res.status(403).json({ error: 'Unauthorized access' });
+    return res.status(400).json({ error: 'Unauthorized access' });
   }
   try {
     const user = await User.findById(userId);
@@ -149,7 +174,8 @@ router.put('/profile/:userId', authenticateJWT, async (req, res) => {
 
     res.json({ message: 'Profile updated successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Profile update error:', error);
+    res.status(500).json({ error: 'Server error updating profile', details: error.message });
   }
 });
 
@@ -171,17 +197,18 @@ router.post('/change-avatar/:userId', authenticateJWT, async (req, res) => {
 
     res.json({ message: 'Avatar updated successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Change avatar error:', error);
+    res.status(500).json({ error: 'Server error updating avatar', details: error.message });
   }
 });
 
 router.post('/change-password', authenticateJWT, async (req, res) => {
-  const { userId, oldPassword, newPassword } = req.body;
-  if (req.user.userId !== userId) {
+  const { userId: targetUserId, oldPassword, newPassword } = req.body;
+  if (req.user.userId !== targetUserId) {
     return res.status(403).json({ error: 'Unauthorized access' });
   }
   try {
-    const user = await User.findById(userId);
+    const user = await User.findById(targetUserId);
     if (!user || !(await bcrypt.compare(oldPassword, user.password))) {
       return res.status(400).json({ error: 'Invalid old password' });
     }
@@ -190,7 +217,8 @@ router.post('/change-password', authenticateJWT, async (req, res) => {
     await user.save();
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Server error changing password', details: error.message });
   }
 });
 
@@ -202,24 +230,29 @@ router.post('/forgot-password', async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ error: 'Email not found' });
+      return res.json({ message: 'If your email is in our system, OTP will be sent.' });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
-    user.otpExpires = Date.now() + 10 * 60 * 1000;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     await user.save();
 
-    await EmailJS.send(
-      process.env.EMAILJS_SERVICE_ID,
-      process.env.EMAILJS_TEMPLATE_ID,
-      { otp, to_email: email },
-      { publicKey: process.env.EMAILJS_USER_ID }
-    );
-
-    res.json({ message: 'OTP sent to email' });
+    try {
+      await EmailJS.send(
+        process.env.EMAILJS_SERVICE_ID,
+        process.env.EMAILJS_TEMPLATE_ID,
+        { otp, to_email: email },
+        { publicKey: process.env.EMAILJS_USER_ID, privateKey: process.env.EMAILJS_PRIVATE_KEY }
+      );
+      res.json({ message: 'OTP sent to email' });
+    } catch (emailError) {
+      console.error('EmailJS error:', emailError);
+      return res.status(500).json({ error: 'Failed to send OTP email', details: emailError.message });
+    }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Server error during forgot password', details: error.message });
   }
 });
 
@@ -241,7 +274,8 @@ router.post('/verify-otp', async (req, res) => {
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ error: 'Server error verifying OTP', details: error.message });
   }
 });
 
