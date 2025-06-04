@@ -7,12 +7,13 @@ const router = express.Router();
 const authenticateJWT = require('../utils/authMiddleware');
 
 router.post('/', authenticateJWT, async (req, res) => {
-  // userId should be taken from authenticated user, not request body for security
   const { name } = req.body;
   const userId = req.user.userId;
 
   try {
-    // Check if label with the same name already exists for this user
+    if (!name || typeof name !== 'string' || name.trim() === '' || name.length > 50) {
+      return res.status(400).json({ error: 'Label name must be a non-empty string (max 50 characters)' });
+    }
     const existingLabel = await Label.findOne({ userId, name });
     if (existingLabel) {
       return res.status(400).json({ error: 'Label with this name already exists' });
@@ -31,30 +32,31 @@ router.put('/:labelId', authenticateJWT, async (req, res) => {
   const userId = req.user.userId;
 
   try {
+    if (!name || typeof name !== 'string' || name.trim() === '' || name.length > 50) {
+      return res.status(400).json({ error: 'Label name must be a non-empty string (max 50 characters)' });
+    }
     const label = await Label.findById(labelId);
     if (!label) {
-        return res.status(404).json({ error: 'Label not found' });
+      return res.status(404).json({ error: 'Label not found' });
     }
     if (label.userId !== userId) {
       return res.status(403).json({ error: 'Unauthorized to update this label' });
     }
 
-    // Check if the new name conflicts with an existing label for the same user
     if (name !== label.name) {
-        const existingLabel = await Label.findOne({ userId, name, _id: { $ne: labelId } });
-        if (existingLabel) {
-          return res.status(400).json({ error: 'Another label with this name already exists' });
-        }
+      const existingLabel = await Label.findOne({ userId, name, _id: { $ne: labelId } });
+      if (existingLabel) {
+        return res.status(400).json({ error: 'Another label with this name already exists' });
+      }
     }
 
     const oldName = label.name;
     label.name = name;
     await label.save();
 
-    // Update emails that have the old label name for this user
     if (oldName !== name) {
       await Email.updateMany(
-        { $or: [{ to: userId }, { from: userId }], labels: oldName },
+        { $or: [{ to: userId }, { from: userId }, { cc: userId }, { bcc: userId }], labels: oldName },
         { $set: { 'labels.$[elem]': name } },
         { arrayFilters: [{ elem: oldName }] }
       );
@@ -68,21 +70,21 @@ router.put('/:labelId', authenticateJWT, async (req, res) => {
 router.delete('/:labelId', authenticateJWT, async (req, res) => {
   const { labelId } = req.params;
   const userId = req.user.userId;
+
   try {
     const label = await Label.findById(labelId);
     if (!label) {
-        return res.status(404).json({ error: 'Label not found' });
+      return res.status(404).json({ error: 'Label not found' });
     }
     if (label.userId !== userId) {
       return res.status(403).json({ error: 'Unauthorized to delete this label' });
     }
 
     const labelName = label.name;
-    await Label.deleteOne({ _id: labelId }); // Use deleteOne
+    await Label.deleteOne({ _id: labelId });
 
-    // Remove the label from all emails of this user
     await Email.updateMany(
-      { $or: [{ to: userId }, { from: userId }], labels: labelName },
+      { $or: [{ to: userId }, { from: userId }, { cc: userId }, { bcc: userId }], labels: labelName },
       { $pull: { labels: labelName } }
     );
     res.json({ message: 'Label deleted successfully' });
@@ -93,20 +95,26 @@ router.delete('/:labelId', authenticateJWT, async (req, res) => {
 
 router.post('/assign/:emailId', authenticateJWT, async (req, res) => {
   const { emailId } = req.params;
-  const { label: labelName } = req.body; // Expecting label name
+  const { label: labelName } = req.body;
   const userId = req.user.userId;
 
   try {
     const email = await Email.findById(emailId);
     if (!email) return res.status(404).json({ error: 'Email not found' });
-    if (email.to !== userId && email.from !== userId && (!email.cc || !email.cc.includes(userId)) && (!email.bcc || !email.bcc.includes(userId))) {
+
+    const authorizedUsers = [
+      email.from.toString(),
+      email.to.toString(),
+      ...(email.cc || []).map(id => id.toString()),
+      ...(email.bcc || []).map(id => id.toString()),
+    ];
+    if (!authorizedUsers.includes(userId)) {
       return res.status(403).json({ error: 'Unauthorized to modify this email' });
     }
 
-    // Ensure the label exists for the user
     const labelExists = await Label.findOne({ userId, name: labelName });
     if (!labelExists) {
-        return res.status(400).json({ error: `Label '${labelName}' does not exist.` });
+      return res.status(400).json({ error: `Label '${labelName}' does not exist` });
     }
 
     if (!email.labels.includes(labelName)) {
@@ -121,13 +129,20 @@ router.post('/assign/:emailId', authenticateJWT, async (req, res) => {
 
 router.post('/remove-label/:emailId', authenticateJWT, async (req, res) => {
   const { emailId } = req.params;
-  const { label: labelName } = req.body; // Expecting label name
+  const { label: labelName } = req.body;
   const userId = req.user.userId;
 
   try {
     const email = await Email.findById(emailId);
     if (!email) return res.status(404).json({ error: 'Email not found' });
-     if (email.to !== userId && email.from !== userId && (!email.cc || !email.cc.includes(userId)) && (!email.bcc || !email.bcc.includes(userId))) {
+
+    const authorizedUsers = [
+      email.from.toString(),
+      email.to.toString(),
+      ...(email.cc || []).map(id => id.toString()),
+      ...(email.bcc || []).map(id => id.toString()),
+    ];
+    if (!authorizedUsers.includes(userId)) {
       return res.status(403).json({ error: 'Unauthorized to modify this email' });
     }
 
@@ -161,13 +176,13 @@ router.get('/emails/:userId/:labelName', authenticateJWT, async (req, res) => {
   }
   try {
     const query = {
-      $or: [{ to: userId }, { from: userId }],
-      labels: labelName
+      $or: [{ to: userId }, { from: userId }, { cc: userId }, { bcc: userId }],
+      labels: labelName,
     };
     const emails = await Email.find(query)
       .sort({ time: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+      .limit(Math.min(parseInt(limit), 100));
     const total = await Email.countDocuments(query);
     res.json({ emails, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (error) {

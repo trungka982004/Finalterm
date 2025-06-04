@@ -1,15 +1,14 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs'); // For classifier loading/saving
+const fs = require('fs');
 const Email = require('../models/Email');
 const User = require('../models/User');
 const router = express.Router();
 const natural = require('natural');
 
-// Import shared middleware (no longer need local authenticateJWT or isValidEmail definitions)
+// Import shared middleware
 const authenticateJWT = require('../utils/authMiddleware');
-// isValidEmail is not used in this file anymore if to/cc/bcc are User IDs for internal comms
 
 const storage = multer.diskStorage({
   destination: './uploads/',
@@ -17,57 +16,94 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
-const upload = multer({ storage }); // Add file size/type limits here if needed
+
+// File validation for attachments
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'text/plain'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type. Allowed: JPEG, PNG, PDF, TXT'));
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+});
 
 // Spam Classifier Setup
 let classifier = new natural.BayesClassifier();
-const classifierPath = './spam_classifier.json'; // Path to save/load classifier
+const classifierPath = './spam_classifier.json';
+
+// Expanded training data
+const trainingData = [
+  // Spam examples
+  { text: 'win million dollars now instant cash prize', label: 'spam' },
+  { text: 'free viagra exclusive offer click here', label: 'spam' },
+  { text: 'nigerian prince urgent funds transfer', label: 'spam' },
+  { text: 'enlarge your product cheap pills', label: 'spam' },
+  { text: 'account suspended verify now', label: 'spam' },
+  { text: 'lottery winner claim your prize', label: 'spam' },
+  { text: 'cheap rolex watches limited offer', label: 'spam' },
+  { text: 'urgent action needed bank account', label: 'spam' },
+  { text: 'get rich quick scheme join now', label: 'spam' },
+  { text: 'free gift card click to claim', label: 'spam' },
+  // Non-spam examples
+  { text: 'hello friend how are you today', label: 'not spam' },
+  { text: 'meeting tomorrow at 10am conference room', label: 'not spam' },
+  { text: 'project update please review', label: 'not spam' },
+  { text: 'invoice for order #12345 due next week', label: 'not spam' },
+  { text: 'family dinner this weekend RSVP', label: 'not spam' },
+  { text: 'team meeting agenda for Monday', label: 'not spam' },
+  { text: 'thank you for your feedback', label: 'not spam' },
+  { text: 'weekly report submission reminder', label: 'not spam' },
+  { text: 'happy birthday celebration invite', label: 'not spam' },
+  { text: 'contract review meeting next Friday', label: 'not spam' },
+];
 
 try {
   const classifierData = fs.readFileSync(classifierPath, 'utf8');
   classifier = natural.BayesClassifier.restore(JSON.parse(classifierData));
   console.log('Spam classifier loaded from file.');
 } catch (error) {
-  console.log('No pre-trained classifier found or error loading, training new one...');
-  // Minimal training data - EXPAND THIS SIGNIFICANTLY FOR EFFECTIVENESS
-  classifier.addDocument('win money now instant prize', 'spam');
-  classifier.addDocument('free exclusive offer click here limited time', 'spam');
-  classifier.addDocument('nigerian prince needs your help with funds', 'spam');
-  classifier.addDocument('enlarge your xxx product now', 'spam');
-  classifier.addDocument('urgent account verification needed immediately', 'spam');
-
-  classifier.addDocument('hello friend how are you doing today', 'not spam');
-  classifier.addDocument('meeting scheduled for tomorrow at 10am', 'not spam');
-  classifier.addDocument('project update and next steps discussion', 'not spam');
-  classifier.addDocument('invoice for recent purchase order #12345', 'not spam');
-  classifier.addDocument('family gathering next weekend, hope you can make it', 'not spam');
+  console.log('Training new spam classifier...');
+  trainingData.forEach(({ text, label }) => classifier.addDocument(text, label));
   classifier.train();
   try {
     fs.writeFileSync(classifierPath, JSON.stringify(classifier));
     console.log('New spam classifier trained and saved.');
   } catch (saveError) {
-    console.error('Could not save new classifier:', saveError);
+    console.error('Could not save classifier:', saveError);
   }
 }
 
 const isSpam = (text) => classifier.classify(text) === 'spam';
 
+// Validate User IDs
+const validateUserIds = async (ids) => {
+  if (!Array.isArray(ids)) ids = [ids]; // Handle single ID or array
+  for (const id of ids.filter(id => id)) { // Skip empty IDs
+    if (!mongoose.isValidObjectId(id) || !(await User.exists({ _id: id }))) {
+      throw new Error(`Invalid or non-existent User ID: ${id}`);
+    }
+  }
+};
+
 router.post('/send', authenticateJWT, upload.array('attachments'), async (req, res) => {
-  const { to, cc, bcc, subject, body, category } = req.body; // 'from' is now taken from req.user.userId
+  const { to, cc, bcc, subject, body, category } = req.body;
   const files = req.files;
 
-  // Assuming to, cc, bcc are User._id strings for internal communication.
-  // No longer using isValidEmail for these fields here. Validation might involve checking if User._id exists.
-
   try {
+    // Validate User IDs
+    await validateUserIds([to, ...(cc || []), ...(bcc || [])]);
+
     const isSpamEmail = isSpam(`${subject} ${body}`);
-    const attachmentUrls = files.map(file => `/uploads/${file.filename}`); // Store relative paths
+    const attachmentUrls = files.map(file => `/uploads/${file.filename}`);
 
     const email = new Email({
-      from: req.user.userId, // Set 'from' from authenticated user
-      to, // Assumed to be a User._id
-      cc, // Assumed to be User._id(s)
-      bcc, // Assumed to be User._id(s)
+      from: req.user.userId,
+      to,
+      cc: cc || [],
+      bcc: bcc || [],
       subject,
       body,
       time: new Date().toISOString(),
@@ -78,78 +114,75 @@ router.post('/send', authenticateJWT, upload.array('attachments'), async (req, r
     await email.save();
 
     const io = req.app.get('io');
-    // Notify recipient(s) - 'to' should be a User._id or an array of User._id for cc/bcc handling
-    // For simplicity, emitting to the primary 'to' user.
-    // If 'to' is an array or cc/bcc are also User IDs, you'd loop or use multiple io.to()
-    if (email.to) {
-        io.to(email.to).emit('newEmail', {
-            _id: email._id, // Send email ID
-            from: req.user.userId, // Or fetch sender's display name/email
-            subject: email.subject,
-            time: email.time,
-            isSpam: isSpamEmail
-        });
+    // Notify all recipients (to, cc, bcc)
+    const notifyUsers = [email.to, ...(email.cc || []), ...(email.bcc || [])].filter(id => id);
+    for (const userId of notifyUsers) {
+      io.to(userId).emit('newEmail', {
+        _id: email._id,
+        from: req.user.userId,
+        subject: email.subject,
+        time: email.time,
+        isSpam: isSpamEmail,
+      });
     }
-    // Handle cc/bcc notifications similarly if they are User IDs
-    // Example for cc (assuming cc is a single User ID for simplicity here, adapt if it's a list):
-    // if (email.cc) {
-    //     io.to(email.cc).emit('newEmail', { /* ... */ });
-    // }
-
 
     // Auto-reply logic
-    const recipientUser = await User.findById(to); // 'to' is the recipient's User._id
+    const recipientUser = await User.findById(to);
     if (recipientUser && recipientUser.autoAnswerEnabled && !isSpamEmail) {
       const autoReplyEmail = new Email({
-        from: to, // Auto-reply comes from the original recipient (now sender of auto-reply)
-        to: req.user.userId, // Auto-reply goes to the original sender
+        from: to,
+        to: req.user.userId,
         subject: `Re: ${subject}`,
         body: recipientUser.autoAnswerMessage,
         time: new Date().toISOString(),
-        category: 'sent', // Auto-replies are 'sent' from the perspective of the auto-answering user
-        inReplyTo: email._id.toString(),
+        category: 'sent',
+        inReplyTo: email._id,
       });
       await autoReplyEmail.save();
-      // Notify the original sender about the auto-reply
       io.to(req.user.userId).emit('newEmail', {
-          _id: autoReplyEmail._id,
-          from: to, // Sender of auto-reply (original recipient)
-          subject: autoReplyEmail.subject,
-          time: autoReplyEmail.time
+        _id: autoReplyEmail._id,
+        from: to,
+        subject: autoReplyEmail.subject,
+        time: autoReplyEmail.time,
       });
     }
 
     res.json({ message: 'Email sent successfully', emailId: email._id });
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error('Error sending email:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 router.post('/reply/:emailId', authenticateJWT, upload.array('attachments'), async (req, res) => {
   const { emailId } = req.params;
-  const { to, cc, bcc, body } = req.body; // 'from' is from req.user.userId
+  const { to, cc, bcc, body } = req.body;
   const files = req.files;
 
-  // Assuming to, cc, bcc are User._id strings
   try {
+    // Validate User IDs
+    await validateUserIds([to, ...(cc || []), ...(bcc || [])]);
+
     const originalEmail = await Email.findById(emailId);
     if (!originalEmail) return res.status(404).json({ error: 'Original email not found' });
 
-    // Ensure user is authorized to reply (e.g., was a recipient or sender of original)
-    // This check might need refinement based on exact authorization rules
-    if (originalEmail.to !== req.user.userId && originalEmail.from !== req.user.userId && (!originalEmail.cc || !originalEmail.cc.includes(req.user.userId)) && (!originalEmail.bcc || !originalEmail.bcc.includes(req.user.userId))) {
-        // A more complex check if cc/bcc are arrays of UserIDs
-        // return res.status(403).json({ error: 'Unauthorized to reply to this email' });
+    // Authorization: User must be sender, recipient, or in cc/bcc
+    const authorizedUsers = [
+      originalEmail.from.toString(),
+      originalEmail.to.toString(),
+      ...(originalEmail.cc || []).map(id => id.toString()),
+      ...(originalEmail.bcc || []).map(id => id.toString()),
+    ];
+    if (!authorizedUsers.includes(req.user.userId)) {
+      return res.status(403).json({ error: 'Unauthorized to reply to this email' });
     }
-
 
     const attachmentUrls = files.map(file => `/uploads/${file.filename}`);
     const replyEmail = new Email({
       from: req.user.userId,
-      to, // recipient of the reply (could be originalEmail.from)
-      cc,
-      bcc,
+      to,
+      cc: cc || [],
+      bcc: bcc || [],
       subject: `Re: ${originalEmail.subject}`,
       body,
       time: new Date().toISOString(),
@@ -161,15 +194,15 @@ router.post('/reply/:emailId', authenticateJWT, upload.array('attachments'), asy
     await replyEmail.save();
 
     const io = req.app.get('io');
-    if (replyEmail.to) {
-        io.to(replyEmail.to).emit('newEmail', {
-            _id: replyEmail._id,
-            from: req.user.userId,
-            subject: replyEmail.subject,
-            time: replyEmail.time
-        });
+    const notifyUsers = [replyEmail.to, ...(replyEmail.cc || []), ...(replyEmail.bcc || [])].filter(id => id);
+    for (const userId of notifyUsers) {
+      io.to(userId).emit('newEmail', {
+        _id: replyEmail._id,
+        from: req.user.userId,
+        subject: replyEmail.subject,
+        time: replyEmail.time,
+      });
     }
-    // Handle cc/bcc notifications
 
     res.json({ message: 'Reply sent successfully', emailId: replyEmail._id });
   } catch (error) {
@@ -179,23 +212,25 @@ router.post('/reply/:emailId', authenticateJWT, upload.array('attachments'), asy
 
 router.post('/forward/:emailId', authenticateJWT, upload.array('attachments'), async (req, res) => {
   const { emailId } = req.params;
-  const { to, cc, bcc, body: forwardMessageBody } = req.body; // 'from' is from req.user.userId
-  const files = req.files; // New attachments for the forward email
+  const { to, cc, bcc, body: forwardMessageBody } = req.body;
+  const files = req.files;
 
-  // Assuming to, cc, bcc are User._id strings
   try {
+    // Validate User IDs
+    await validateUserIds([to, ...(cc || []), ...(bcc || [])]);
+
     const originalEmail = await Email.findById(emailId);
     if (!originalEmail) return res.status(404).json({ error: 'Original email not found' });
 
-    // Fetch details of original sender for the forwarded message body
-    let originalSenderDisplay = originalEmail.from; // This is a User ID
+    let originalSenderDisplay = originalEmail.from;
     try {
-        const originalSenderUser = await User.findById(originalEmail.from).select('name email phone');
-        if (originalSenderUser) {
-            originalSenderDisplay = originalSenderUser.name || originalSenderUser.email || originalSenderUser.phone;
-        }
-    } catch (e) { console.error("Could not fetch original sender details for forward", e); }
-
+      const originalSenderUser = await User.findById(originalEmail.from).select('name email phone');
+      if (originalSenderUser) {
+        originalSenderDisplay = originalSenderUser.name || originalSenderUser.email || originalSenderUser.phone;
+      }
+    } catch (e) {
+      console.error('Could not fetch original sender details:', e);
+    }
 
     const newAttachmentUrls = files.map(file => `/uploads/${file.filename}`);
     const combinedAttachmentUrls = [...newAttachmentUrls, ...originalEmail.attachmentUrls];
@@ -203,8 +238,8 @@ router.post('/forward/:emailId', authenticateJWT, upload.array('attachments'), a
     const forwardEmail = new Email({
       from: req.user.userId,
       to,
-      cc,
-      bcc,
+      cc: cc || [],
+      bcc: bcc || [],
       subject: `Fwd: ${originalEmail.subject}`,
       body: `${forwardMessageBody}\n\n----- Forwarded Message -----\nFrom: ${originalSenderDisplay}\nTo: ${originalEmail.to} \nSubject: ${originalEmail.subject}\n\n${originalEmail.body}`,
       time: new Date().toISOString(),
@@ -216,15 +251,15 @@ router.post('/forward/:emailId', authenticateJWT, upload.array('attachments'), a
     await forwardEmail.save();
 
     const io = req.app.get('io');
-    if (forwardEmail.to) {
-        io.to(forwardEmail.to).emit('newEmail', {
-            _id: forwardEmail._id,
-            from: req.user.userId,
-            subject: forwardEmail.subject,
-            time: forwardEmail.time
-        });
+    const notifyUsers = [forwardEmail.to, ...(forwardEmail.cc || []), ...(forwardEmail.bcc || [])].filter(id => id);
+    for (const userId of notifyUsers) {
+      io.to(userId).emit('newEmail', {
+        _id: forwardEmail._id,
+        from: req.user.userId,
+        subject: forwardEmail.subject,
+        time: forwardEmail.time,
+      });
     }
-    // Handle cc/bcc notifications
 
     res.json({ message: 'Email forwarded successfully', emailId: forwardEmail._id });
   } catch (error) {
@@ -233,18 +268,22 @@ router.post('/forward/:emailId', authenticateJWT, upload.array('attachments'), a
 });
 
 router.post('/draft', authenticateJWT, upload.array('attachments'), async (req, res) => {
-  // 'from' is from req.user.userId. 'to', 'cc', 'bcc' can be empty for drafts or User._ids
   const { to, cc, bcc, subject, body } = req.body;
   const files = req.files;
 
   try {
+    // Validate User IDs (optional for drafts)
+    if (to || cc || bcc) {
+      await validateUserIds([to, ...(cc || []), ...(bcc || [])]);
+    }
+
     const attachmentUrls = files.map(file => `/uploads/${file.filename}`);
     const draftEmail = new Email({
       from: req.user.userId,
-      to: to || '', // Can be empty
-      cc: cc || '',
-      bcc: bcc || '',
-      subject: subject || '', // Can be empty
+      to: to || null,
+      cc: cc || [],
+      bcc: bcc || [],
+      subject: subject || '',
       body: body || '',
       time: new Date().toISOString(),
       category: 'draft',
@@ -262,10 +301,19 @@ router.post('/draft', authenticateJWT, upload.array('attachments'), async (req, 
 router.put('/action/:emailId', authenticateJWT, async (req, res) => {
   const { emailId } = req.params;
   const { isRead, isStarred, category, labels } = req.body;
+
   try {
     const email = await Email.findById(emailId);
-    // Ensure the user is involved in the email (sender or recipient)
-    if (!email || (email.to !== req.user.userId && email.from !== req.user.userId && (!email.cc || !email.cc.includes(req.user.userId)) && (!email.bcc || !email.bcc.includes(req.user.userId)))) {
+    if (!email) return res.status(404).json({ error: 'Email not found' });
+
+    // Authorization: User must be sender, recipient, or in cc/bcc
+    const authorizedUsers = [
+      email.from.toString(),
+      email.to.toString(),
+      ...(email.cc || []).map(id => id.toString()),
+      ...(email.bcc || []).map(id => id.toString()),
+    ];
+    if (!authorizedUsers.includes(req.user.userId)) {
       return res.status(403).json({ error: 'Unauthorized or email not found' });
     }
 
@@ -274,11 +322,11 @@ router.put('/action/:emailId', authenticateJWT, async (req, res) => {
     if (category && ['inbox', 'sent', 'draft', 'trash', 'archive', 'spam'].includes(category)) {
       email.category = category;
     }
-    if (labels) email.labels = labels; // Expects an array of label strings or label IDs
+    if (labels) email.labels = labels;
     await email.save();
 
     const io = req.app.get('io');
-    io.to(req.user.userId).emit('emailUpdated', email); // Notify user about the update
+    io.to(req.user.userId).emit('emailUpdated', email);
 
     res.json({ message: 'Email updated successfully', email });
   } catch (error) {
@@ -289,35 +337,32 @@ router.put('/action/:emailId', authenticateJWT, async (req, res) => {
 router.get('/:userId/:category', authenticateJWT, async (req, res) => {
   const { userId, category } = req.params;
   const { page = 1, limit = 10 } = req.query;
+
   if (req.user.userId !== userId) {
     return res.status(403).json({ error: 'Unauthorized access' });
   }
-  // Validate category
   if (!['inbox', 'sent', 'draft', 'trash', 'archive', 'spam', 'starred'].includes(category.toLowerCase())) {
     return res.status(400).json({ error: 'Invalid category' });
   }
-  
-  try {
-    let query = { $or: [{ to: userId }, { from: userId }] };
-    if (category.toLowerCase() === 'inbox') {
-        query.to = userId;
-        query.category = { $in: ['inbox', 'spam'] }; // Inbox typically shows incoming mail
-    } else if (category.toLowerCase() === 'sent') {
-        query.from = userId;
-        query.category = 'sent';
-    } else if (category.toLowerCase() === 'starred') {
-        query.isStarred = true;
-        // query.category = {$ne: 'trash'}; // Optionally exclude trash
-    } else {
-        query.category = category.toLowerCase();
-    }
 
+  try {
+    let query = { $or: [{ to: userId }, { from: userId }, { cc: userId }, { bcc: userId }] };
+    if (category.toLowerCase() === 'inbox') {
+      query.to = userId;
+      query.category = { $in: ['inbox', 'spam'] };
+    } else if (category.toLowerCase() === 'sent') {
+      query.from = userId;
+      query.category = 'sent';
+    } else if (category.toLowerCase() === 'starred') {
+      query.isStarred = true;
+    } else {
+      query.category = category.toLowerCase();
+    }
 
     const emails = await Email.find(query)
       .sort({ time: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
-      
+      .limit(Math.min(parseInt(limit), 100)); // Cap limit at 100
     const total = await Email.countDocuments(query);
     res.json({ emails, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (error) {
@@ -332,28 +377,32 @@ router.get('/search/:userId', authenticateJWT, async (req, res) => {
   if (req.user.userId !== userId) {
     return res.status(403).json({ error: 'Unauthorized access' });
   }
+
   try {
-    let query = { $or: [{ to: userId }, { from: userId }] }; // Base query: user is involved
+    let query = { $or: [{ to: userId }, { from: userId }, { cc: userId }, { bcc: userId }] };
 
     if (keyword) {
-      query.$and = query.$and || []; // Initialize $and if it doesn't exist
+      query.$and = query.$and || [];
       query.$and.push({
         $or: [
           { subject: { $regex: keyword, $options: 'i' } },
           { body: { $regex: keyword, $options: 'i' } },
-          // Consider searching from/to display names if you store/resolve them
         ],
       });
     }
 
-    // Assuming 'from' and 'to' query params are User._ids or emails to be resolved to User._ids
-    if (from) { // 'from' is a search filter for emails *received from* this user ID
-      query.from = from; // This 'from' refers to the 'from' field in Email schema
+    if (from) {
+      if (!mongoose.isValidObjectId(from) || !(await User.exists({ _id: from }))) {
+        return res.status(400).json({ error: 'Invalid from User ID' });
+      }
+      query.from = from;
     }
-    if (to) { // 'to' is a search filter for emails *sent to* this user ID
-       query.to = to; // This 'to' refers to the 'to' field in Email schema
+    if (to) {
+      if (!mongoose.isValidObjectId(to) || !(await User.exists({ _id: to }))) {
+        return res.status(400).json({ error: 'Invalid to User ID' });
+      }
+      query.to = to;
     }
-
     if (hasAttachments !== undefined) {
       query.hasAttachments = hasAttachments === 'true';
     }
@@ -363,13 +412,13 @@ router.get('/search/:userId', authenticateJWT, async (req, res) => {
       if (endDate) query.time.$lte = new Date(endDate).toISOString();
     }
     if (label) {
-      query.labels = label; // Assumes label is a string matching one in the labels array
+      query.labels = label;
     }
 
     const emails = await Email.find(query)
       .sort({ time: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+      .limit(Math.min(parseInt(limit), 100));
     const total = await Email.countDocuments(query);
     res.json({ emails, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (error) {
