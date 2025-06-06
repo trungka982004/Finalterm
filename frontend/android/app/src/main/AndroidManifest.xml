@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="app_web"
+        android:label="Gmail_Clone"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
