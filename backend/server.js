@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const authRoutes = require('./routes/auth');
 const emailRoutes = require('./routes/email');
+const userRoutes = require('./routes/user');
 
 // Explicitly specify the path to .env
 dotenv.config({ path: __dirname + '/.env' });
@@ -49,6 +50,7 @@ app.set('io', io);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/user', userRoutes);
 
 // Khởi động server
 const PORT = process.env.PORT || 3000;

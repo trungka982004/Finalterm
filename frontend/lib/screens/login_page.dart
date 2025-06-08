@@ -210,30 +210,29 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                             return null;
                                           },
                                         ),
-                                        AnimatedContainer(
-                                          duration: const Duration(milliseconds: 300),
-                                          curve: Curves.easeInOut,
-                                          height: _showOtpField ? 80 : 0,
-                                          child: AnimatedOpacity(
-                                            opacity: _showOtpField ? 1.0 : 0.0,
-                                            duration: const Duration(milliseconds: 300),
-                                            child: TextFormField(
-                                              controller: _otpController,
-                                              keyboardType: TextInputType.number,
-                                              decoration: const InputDecoration(
-                                                labelText: 'OTP',
-                                                prefixIcon: Icon(Icons.security),
-                                              ),
-                                              validator: (value) {
-                                                if (_showOtpField && (value == null || value.isEmpty)) {
-                                                  return 'Please enter the OTP';
-                                                }
-                                                return null;
-                                              },
+                                        const SizedBox(height: 16),
+                                        AnimatedCrossFade(
+                                          firstChild: const SizedBox.shrink(),
+                                          secondChild: TextFormField(
+                                            controller: _otpController,
+                                            keyboardType: TextInputType.number,
+                                            decoration: const InputDecoration(
+                                              labelText: 'OTP',
+                                              prefixIcon: Icon(Icons.security),
                                             ),
+                                            validator: (value) {
+                                              if (_showOtpField && (value == null || value.isEmpty)) {
+                                                return 'Please enter the OTP';
+                                              }
+                                              return null;
+                                            },
                                           ),
+                                          crossFadeState: _showOtpField
+                                              ? CrossFadeState.showSecond
+                                              : CrossFadeState.showFirst,
+                                          duration: const Duration(milliseconds: 300),
                                         ),
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 16),
                                         Align(
                                           alignment: Alignment.centerRight,
                                           child: TextButton(

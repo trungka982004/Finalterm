@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Email = require('../models/Email');
 const Label = require('../models/Label');
 const AutoReply = require('../models/AutoReply');
+const { detectSpam } = require('../spamDetection'); // Import spam detection utility
 
 // Cấu hình Multer cho đính kèm
 const storage = multer.memoryStorage();
@@ -139,8 +140,18 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
     // Lấy io từ app
     const io = req.app.get('io');
 
-    // Lưu email vào Inbox của người nhận
+    // Kiểm tra spam
+    const isSpam = await detectSpam(sentEmail, req.user.email);
+
+    // Lưu email vào Inbox hoặc Spam của người nhận
     for (const recipient of recipients) {
+      // Đảm bảo nhãn "Spam" tồn tại cho người nhận
+      const recipientUser = recipientUsers.find(u => u.email === recipient);
+      let spamLabel = null;
+      if (isSpam && recipientUser) {
+        spamLabel = await Label.ensureSpamLabel(recipientUser._id);
+      }
+
       const inboxEmail = new Email({
         sender: req.user.email,
         recipients: [recipient],
@@ -149,8 +160,10 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
         subject,
         body,
         attachments,
-        folder: 'inbox',
-        sentAt: sentEmail.sentAt
+        folder: isSpam ? 'spam' : 'inbox',
+        sentAt: sentEmail.sentAt,
+        isSpam,
+        labels: isSpam && spamLabel ? [spamLabel._id] : []
       });
       await inboxEmail.save();
 
@@ -160,7 +173,8 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
           io.to(recipient).emit('newEmail', {
             sender: req.user.email,
             subject,
-            sentAt: inboxEmail.sentAt
+            sentAt: inboxEmail.sentAt,
+            isSpam
           });
         } catch (wsErr) {
           console.error('WebSocket error for recipient', recipient, wsErr.message, wsErr.stack);
@@ -169,9 +183,8 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
         console.warn('Socket.IO not initialized, skipping WebSocket notification for recipient:', recipient);
       }
 
-      // Kiểm tra và gửi Auto Reply
-      const recipientUser = recipientUsers.find(u => u.email === recipient);
-      if (recipientUser) {
+      // Kiểm tra và gửi Auto Reply (chỉ nếu không phải spam)
+      if (!isSpam && recipientUser) {
         const autoReply = await AutoReply.findOne({ userId: recipientUser._id });
         if (autoReply && autoReply.enabled && recipientUser.isEmailVerified) {
           const replyEmail = new Email({
@@ -211,8 +224,14 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
       }
     }
 
-    // Lưu email vào Inbox của CC
+    // Lưu email vào Inbox hoặc Spam của CC
     for (const ccEmail of cc) {
+      const recipientUser = recipientUsers.find(u => u.email === ccEmail);
+      let spamLabel = null;
+      if (isSpam && recipientUser) {
+        spamLabel = await Label.ensureSpamLabel(recipientUser._id);
+      }
+
       const ccInboxEmail = new Email({
         sender: req.user.email,
         recipients: [ccEmail],
@@ -221,8 +240,10 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
         subject,
         body,
         attachments,
-        folder: 'inbox',
-        sentAt: sentEmail.sentAt
+        folder: isSpam ? 'spam' : 'inbox',
+        sentAt: sentEmail.sentAt,
+        isSpam,
+        labels: isSpam && spamLabel ? [spamLabel._id] : []
       });
       await ccInboxEmail.save();
 
@@ -231,7 +252,8 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
           io.to(ccEmail).emit('newEmail', {
             sender: req.user.email,
             subject,
-            sentAt: ccInboxEmail.sentAt
+            sentAt: ccInboxEmail.sentAt,
+            isSpam
           });
         } catch (wsErr) {
           console.error('WebSocket error for CC', ccEmail, wsErr.message, wsErr.stack);
@@ -241,8 +263,14 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
       }
     }
 
-    // Lưu email vào Inbox của BCC
+    // Lưu email vào Inbox hoặc Spam của BCC
     for (const bccEmail of bcc) {
+      const recipientUser = recipientUsers.find(u => u.email === bccEmail);
+      let spamLabel = null;
+      if (isSpam && recipientUser) {
+        spamLabel = await Label.ensureSpamLabel(recipientUser._id);
+      }
+
       const bccInboxEmail = new Email({
         sender: req.user.email,
         recipients: [bccEmail],
@@ -251,8 +279,10 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
         subject,
         body,
         attachments,
-        folder: 'inbox',
-        sentAt: sentEmail.sentAt
+        folder: isSpam ? 'spam' : 'inbox',
+        sentAt: sentEmail.sentAt,
+        isSpam,
+        labels: isSpam && spamLabel ? [spamLabel._id] : []
       });
       await bccInboxEmail.save();
 
@@ -261,7 +291,8 @@ router.post('/send', authenticateToken, ensureEmailVerified, upload.array('attac
           io.to(bccEmail).emit('newEmail', {
             sender: req.user.email,
             subject,
-            sentAt: bccInboxEmail.sentAt
+            sentAt: bccInboxEmail.sentAt,
+            isSpam
           });
         } catch (wsErr) {
           console.error('WebSocket error for BCC', bccEmail, wsErr.message, wsErr.stack);
@@ -286,10 +317,24 @@ router.post('/save-draft', authenticateToken, ensureEmailVerified, upload.array(
     api_secret: process.env.CLOUDINARY_API_SECRET
   });
 
-  const { recipients, cc, bcc, subject, body } = req.body;
+  let { recipients, cc, bcc, subject, body } = req.body;
 
   try {
-    // Kiểm tra định dạng recipients, cc, bcc
+    if (recipients && typeof recipients === 'string') {
+      recipients = JSON.parse(recipients);
+    }
+    if (cc && typeof cc === 'string') {
+      cc = JSON.parse(cc);
+    }
+    if (bcc && typeof bcc === 'string') {
+      bcc = JSON.parse(bcc);
+    }
+  } catch (err) {
+    console.error('JSON parse error in save-draft:', err.message);
+    return res.status(400).json({ error: 'Invalid JSON format in recipients, cc, or bcc' });
+  }
+
+  try {
     if (recipients && !Array.isArray(recipients)) {
       return res.status(400).json({ error: 'Recipients must be an array' });
     }
@@ -310,11 +355,7 @@ router.post('/save-draft', authenticateToken, ensureEmailVerified, upload.array(
           );
           uploadStream.end(file.buffer);
         });
-        attachments.push({
-          url: result.secure_url,
-          filename: file.originalname,
-          size: file.size
-        });
+        attachments.push({ url: result.secure_url, filename: file.originalname, size: file.size });
       }
     }
 
@@ -332,7 +373,7 @@ router.post('/save-draft', authenticateToken, ensureEmailVerified, upload.array(
     await draftEmail.save();
     res.json({ message: 'Draft saved successfully', emailId: draftEmail._id });
   } catch (err) {
-    console.error('Save draft error:', err.message, err.stack);
+    console.error('Save draft error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -384,6 +425,14 @@ router.post('/reply/:emailId', authenticateToken, ensureEmailVerified, upload.ar
       attachments,
       folder: 'sent'
     });
+
+    // Check if reply is spam
+    const isSpam = await detectSpam(replyEmail, req.user.email);
+    let spamLabel = null;
+    if (isSpam) {
+      spamLabel = await Label.ensureSpamLabel(recipientUser._id);
+    }
+
     await replyEmail.save();
 
     const recipientInboxEmail = new Email({
@@ -392,7 +441,9 @@ router.post('/reply/:emailId', authenticateToken, ensureEmailVerified, upload.ar
       subject: `Re: ${originalEmail.subject}`,
       body: `${body}<br><br>--- Original Message ---<br>${originalEmail.body}`,
       attachments,
-      folder: 'inbox'
+      folder: isSpam ? 'spam' : 'inbox',
+      isSpam,
+      labels: isSpam && spamLabel ? [spamLabel._id] : []
     });
     await recipientInboxEmail.save();
 
@@ -402,7 +453,8 @@ router.post('/reply/:emailId', authenticateToken, ensureEmailVerified, upload.ar
       io.to(originalEmail.sender).emit('newEmail', {
         sender: req.user.email,
         subject: `Re: ${originalEmail.subject}`,
-        sentAt: recipientInboxEmail.sentAt
+        sentAt: recipientInboxEmail.sentAt,
+        isSpam
       });
     } else {
       console.warn('Socket.IO not initialized, skipping WebSocket notification');
@@ -414,6 +466,7 @@ router.post('/reply/:emailId', authenticateToken, ensureEmailVerified, upload.ar
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // Chuyển tiếp email
 router.post('/forward/:emailId', authenticateToken, ensureEmailVerified, upload.array('attachments', 5), async (req, res) => {
   cloudinary.config({
@@ -473,19 +526,31 @@ router.post('/forward/:emailId', authenticateToken, ensureEmailVerified, upload.
       attachments,
       folder: 'sent'
     });
+
+    // Check if forwarded email is spam
+    const isSpam = await detectSpam(forwardEmail, req.user.email);
+
     await forwardEmail.save();
 
     // Lấy io từ req.app
     const io = req.app.get('io');
 
     for (const recipient of recipients) {
+      const recipientUser = recipientUsers.find(u => u.email === recipient);
+      let spamLabel = null;
+      if (isSpam && recipientUser) {
+        spamLabel = await Label.ensureSpamLabel(recipientUser._id);
+      }
+
       const recipientInboxEmail = new Email({
         sender: req.user.email,
         recipients: [recipient],
         subject: `Fwd: ${originalEmail.subject}`,
         body: `${body || ''}<br><br>--- Forwarded Message ---<br>${originalEmail.body}`,
         attachments,
-        folder: 'inbox'
+        folder: isSpam ? 'spam' : 'inbox',
+        isSpam,
+        labels: isSpam && spamLabel ? [spamLabel._id] : []
       });
       await recipientInboxEmail.save();
 
@@ -494,7 +559,8 @@ router.post('/forward/:emailId', authenticateToken, ensureEmailVerified, upload.
           io.to(recipient).emit('newEmail', {
             sender: req.user.email,
             subject: `Fwd: ${originalEmail.subject}`,
-            sentAt: recipientInboxEmail.sentAt
+            sentAt: recipientInboxEmail.sentAt,
+            isSpam
           });
         } catch (wsErr) {
           console.error('WebSocket error for recipient', recipient, wsErr.message, wsErr.stack);
@@ -514,22 +580,49 @@ router.post('/forward/:emailId', authenticateToken, ensureEmailVerified, upload.
 // Lấy danh sách email
 router.get('/list/:folder', authenticateToken, ensureEmailVerified, async (req, res) => {
   const { folder } = req.params;
-  const { view = 'basic', labelId } = req.query;
+  const { labelId, page = 1, limit = 20 } = req.query;
+  const userEmail = req.user.email;
 
   try {
-    if (!['inbox', 'sent', 'draft', 'starred', 'trash'].includes(folder)) {
-      return res.status(400).json({ error: 'Invalid folder' });
+    const validFolders = ['inbox', 'sent', 'draft', 'starred', 'trash', 'spam']; // Added 'spam'
+    if (!validFolders.includes(folder)) {
+      return res.status(400).json({ error: 'Invalid folder name' });
     }
 
-    let query = {
-      folder,
-      $or: [
-        { sender: req.user.email },
-        { recipients: req.user.email },
-        { cc: req.user.email },
-        { bcc: req.user.email }
-      ]
-    };
+    let query = {};
+    switch (folder) {
+      case 'inbox':
+        query = {
+          $or: [{ recipients: userEmail }, { cc: userEmail }, { bcc: userEmail }],
+          folder: 'inbox'
+        };
+        break;
+      case 'sent':
+        query = { sender: userEmail, folder: 'sent' };
+        break;
+      case 'draft':
+        query = { sender: userEmail, folder: 'draft' };
+        break;
+      case 'trash':
+        query = {
+          $or: [{ sender: userEmail }, { recipients: userEmail }, { cc: userEmail }, { bcc: userEmail }],
+          folder: 'trash'
+        };
+        break;
+      case 'starred':
+        query = {
+          $or: [{ sender: userEmail }, { recipients: userEmail }, { cc: userEmail }, { bcc: userEmail }],
+          isStarred: true
+        };
+        break;
+      case 'spam':
+        query = {
+          $or: [{ recipients: userEmail }, { cc: userEmail }, { bcc: userEmail }],
+          folder: 'spam'
+        };
+        break;
+    }
+
     if (labelId) {
       if (!mongoose.isValidObjectId(labelId)) {
         return res.status(400).json({ error: 'Invalid label ID' });
@@ -537,9 +630,17 @@ router.get('/list/:folder', authenticateToken, ensureEmailVerified, async (req, 
       query.labels = labelId;
     }
 
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    const selectFields = 'sender recipients cc bcc subject sentAt draftSavedAt isRead isStarred isSpam labels';
+
     const emails = await Email.find(query)
-      .sort({ sentAt: -1 })
-      .select(view === 'basic' ? 'sender recipients subject sentAt isRead isStarred' : '');
+      .select(selectFields)
+      .sort({ sentAt: -1, draftSavedAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .populate('labels', 'name');
 
     res.json(emails);
   } catch (err) {
@@ -591,13 +692,13 @@ router.patch('/star/:emailId', authenticateToken, ensureEmailVerified, async (re
 
   try {
     if (!mongoose.isValidObjectId(emailId)) {
-      return res.status(400).json({ error: 'Invalid email ID' });
+      return res.status(400).json({ error: 'Invalid email ID format' });
     }
     if (typeof isStarred !== 'boolean') {
-      return res.status(400).json({ error: 'isStarred must be a boolean' });
+      return res.status(400).json({ error: 'isStarred must be a boolean value' });
     }
 
-    const updated = await Email.updateOne(
+    const email = await Email.findOneAndUpdate(
       {
         _id: emailId,
         $or: [
@@ -607,15 +708,19 @@ router.patch('/star/:emailId', authenticateToken, ensureEmailVerified, async (re
           { bcc: req.user.email }
         ]
       },
-      { isStarred }
-    );
-    if (updated.matchedCount === 0) {
-      return res.status(404).json({ error: 'Email not found or unauthorized' });
+      { isStarred },
+      { new: true, select: 'sender recipients subject sentAt isRead isStarred isSpam labels' }
+    ).populate('labels');
+
+    if (!email) {
+      return res.status(404).json({ 
+        error: 'Email not found or you are not authorized to modify it' 
+      });
     }
 
-    res.json({ message: 'Email starred status updated' });
+    res.json(email);
   } catch (err) {
-    console.error('Star email error:', err.message, err.stack);
+    console.error(`Star email error for emailId ${emailId}:`, err.message, err.stack);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -655,33 +760,76 @@ router.patch('/move-to-trash/:emailId', authenticateToken, ensureEmailVerified, 
 // Tìm kiếm email
 router.get('/search', authenticateToken, ensureEmailVerified, async (req, res) => {
   const { keyword, from, to, hasAttachment, startDate, endDate } = req.query;
+  const userEmail = req.user.email;
 
   try {
-    let query = {
-      $or: [
-        { sender: req.user.email },
-        { recipients: req.user.email },
-        { cc: req.user.email },
-        { bcc: req.user.email }
-      ]
+    const matchConditions = {
+      $and: [
+        {
+          $or: [
+            { sender: userEmail },
+            { recipients: userEmail },
+            { cc: userEmail },
+            { bcc: userEmail }
+          ]
+        }
+      ],
+      folder: { $ne: 'trash' }
     };
 
     if (keyword) {
-      query.$or = [
-        { subject: { $regex: keyword, $options: 'i' } },
-        { body: { $regex: keyword, $options: 'i' } }
-      ];
-    }
-    if (from) query.sender = from;
-    if (to) query.recipients = to;
-    if (hasAttachment === 'true') query.attachments = { $ne: [] };
-    if (startDate || endDate) {
-      query.sentAt = {};
-      if (startDate) query.sentAt.$gte = new Date(startDate);
-      if (endDate) query.sentAt.$lte = new Date(endDate);
+      matchConditions.$and.push({
+        $or: [
+          { subject: { $regex: keyword, $options: 'i' } },
+          { body: { $regex: keyword, $options: 'i' } }
+        ]
+      });
     }
 
-    const emails = await Email.find(query).sort({ sentAt: -1 });
+    if (from) {
+      matchConditions.sender = { $regex: from, $options: 'i' };
+    }
+    if (to) {
+      matchConditions.$or = [
+        { recipients: { $regex: to, $options: 'i' } },
+        { cc: { $regex: to, $options: 'i' } }
+      ];
+    }
+    if (hasAttachment === 'true') {
+      matchConditions.attachments = { $exists: true, $ne: [] };
+    }
+    if (startDate || endDate) {
+      matchConditions.sentAt = {};
+      if (startDate) matchConditions.sentAt.$gte = new Date(startDate);
+      if (endDate) matchConditions.sentAt.$lte = new Date(endDate);
+    }
+
+    const emails = await Email.aggregate([
+      { $match: matchConditions },
+      {
+        $sort: {
+          sentAt: -1,
+          folder: 1
+        }
+      },
+      {
+        $group: {
+          _id: {
+            sender: "$sender",
+            subject: "$subject",
+            sentAt: "$sentAt"
+          },
+          originalDoc: { $first: "$$ROOT" }
+        }
+      },
+      {
+        $replaceRoot: { newRoot: "$originalDoc" }
+      },
+      {
+        $sort: { sentAt: -1 }
+      }
+    ]);
+
     res.json(emails);
   } catch (err) {
     console.error('Search email error:', err.message, err.stack);
@@ -715,6 +863,10 @@ router.delete('/labels/:labelId', authenticateToken, ensureEmailVerified, async 
       return res.status(400).json({ error: 'Invalid label ID' });
     }
 
+    const label = await Label.findOne({ _id: labelId, userId: req.user._id });
+    if (!label) return res.status(404).json({ error: 'Label not found or unauthorized' });
+    if (label.isSystemLabel) return res.status(400).json({ error: 'Cannot delete system label' });
+
     const deleted = await Label.deleteOne({ _id: labelId, userId: req.user._id });
     if (deleted.deletedCount === 0) {
       return res.status(404).json({ error: 'Label not found or unauthorized' });
@@ -737,6 +889,10 @@ router.patch('/labels/:labelId', authenticateToken, ensureEmailVerified, async (
       return res.status(400).json({ error: 'Invalid label ID' });
     }
     if (!name) return res.status(400).json({ error: 'Label name is required' });
+
+    const label = await Label.findOne({ _id: labelId, userId: req.user._id });
+    if (!label) return res.status(404).json({ error: 'Label not found or unauthorized' });
+    if (label.isSystemLabel) return res.status(400).json({ error: 'Cannot modify system label' });
 
     const updated = await Label.updateOne(
       { _id: labelId, userId: req.user._id },
@@ -828,6 +984,66 @@ router.post('/auto-reply', authenticateToken, ensureEmailVerified, async (req, r
     res.json({ message: 'Auto reply settings updated', autoReply });
   } catch (err) {
     console.error('Auto reply error:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Lấy thông tin email
+router.get('/emails/:emailId', authenticateToken, ensureEmailVerified, async (req, res) => {
+  const { emailId } = req.params;
+
+  try {
+    if (!mongoose.isValidObjectId(emailId)) {
+      return res.status(400).json({ error: 'Invalid email ID' });
+    }
+
+    const email = await Email.findOne({
+      _id: emailId,
+      $or: [
+        { sender: req.user.email },
+        { recipients: req.user.email },
+        { cc: req.user.email },
+        { bcc: req.user.email }
+      ]
+    }).populate('labels');
+
+    if (!email) {
+      return res.status(404).json({ error: 'Email not found or unauthorized' });
+    }
+
+    res.json(email);
+  } catch (err) {
+    console.error('Get email error:', err.message, err.stack);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/:emailId', authenticateToken, ensureEmailVerified, async (req, res) => {
+  const { emailId } = req.params;
+  const userEmail = req.user.email;
+
+  try {
+    if (!mongoose.isValidObjectId(emailId)) {
+      return res.status(400).json({ error: 'Invalid email ID' });
+    }
+
+    const result = await Email.deleteOne({
+      _id: emailId,
+      $or: [
+        { sender: userEmail },
+        { recipients: userEmail },
+        { cc: userEmail },
+        { bcc: userEmail }
+      ]
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Email not found or you are not authorized to delete it' });
+    }
+
+    res.json({ message: 'Email permanently deleted' });
+  } catch (err) {
+    console.error('Delete email error:', err.message, err.stack);
     res.status(500).json({ error: 'Server error' });
   }
 });

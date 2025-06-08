@@ -1,3 +1,5 @@
+// lib/pages/change_password_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
@@ -10,7 +12,8 @@ class ChangePasswordPage extends StatefulWidget {
 }
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTickerProviderStateMixin {
-  final _phoneController = TextEditingController();
+  // --- ĐÃ XÓA ---
+  // final _phoneController = TextEditingController(); 
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -43,7 +46,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
   @override
   void dispose() {
     _animationController.dispose();
-    _phoneController.dispose();
+    // --- ĐÃ XÓA ---
+    // _phoneController.dispose(); 
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -56,26 +60,37 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
     try {
+      // --- ĐÃ SỬA ---
+      // Lệnh gọi hàm không còn tham số phone
       final success = await authService.changePassword(
-        _phoneController.text,
         _oldPasswordController.text,
         _newPasswordController.text,
         _confirmPasswordController.text,
-      );
-      if (success) {
+      ); //
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password changed successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
         Navigator.pop(context);
       }
     } catch (e) {
       setState(() => _error = e.toString());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_error ?? 'An error occurred'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_error ?? 'An error occurred'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if(mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -155,7 +170,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                         ),
                                         const SizedBox(height: 16),
                                         const Text(
-                                          'Change Password Gmail Clone',
+                                          'Change Password', // Tiêu đề đơn giản hơn
                                           style: TextStyle(
                                             fontSize: 24,
                                             fontWeight: FontWeight.bold,
@@ -164,24 +179,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                           textAlign: TextAlign.center,
                                         ),
                                         const SizedBox(height: 24),
-                                        TextFormField(
-                                          controller: _phoneController,
-                                          keyboardType: TextInputType.phone,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Phone Number',
-                                            prefixIcon: Icon(Icons.phone),
-                                          ),
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Please enter your phone number';
-                                            }
-                                            if (!RegExp(r'^\+?[1-9]\d{1,14}$').hasMatch(value)) {
-                                              return 'Please enter a valid phone number';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        const SizedBox(height: 16),
+                                        
+                                        // --- WIDGET CỦA PHONE ĐÃ BỊ XÓA KHỎI ĐÂY ---
+
                                         TextFormField(
                                           controller: _oldPasswordController,
                                           obscureText: !_isOldPasswordVisible,
@@ -230,8 +230,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                             if (value == null || value.isEmpty) {
                                               return 'Please enter your new password';
                                             }
-                                            if (value.length < 6) {
-                                              return 'Password must be at least 6 characters';
+                                            if (value.length < 8) { // Nhất quán với backend
+                                              return 'Password must be at least 8 characters';
                                             }
                                             return null;
                                           },
@@ -299,16 +299,16 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                   ),
                                 ),
                                 const SizedBox(height: 16),
+                                // Nút quay lại trang chủ/profile hoặc pop()
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Text("Return to login?"),
                                     TextButton(
                                       onPressed: () {
-                                        Navigator.pushNamed(context, '/login');
+                                        Navigator.pop(context); // Đơn giản là quay lại
                                       },
                                       child: const Text(
-                                        'Login',
+                                        'Back',
                                         style: TextStyle(color: Colors.blueAccent),
                                       ),
                                     ),

@@ -14,12 +14,13 @@ const emailSchema = new mongoose.Schema({
   }],
   folder: { 
     type: String, 
-    enum: ['inbox', 'sent', 'draft', 'starred', 'trash'], 
+    enum: ['inbox', 'sent', 'draft', 'starred', 'trash', 'spam'], // Added 'spam' to enum
     default: 'inbox' 
   },
   labels: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Label' }], // Nhãn tùy chỉnh
   isRead: { type: Boolean, default: false },
   isStarred: { type: Boolean, default: false },
+  isSpam: { type: Boolean, default: false }, // New field to track spam status
   sentAt: { type: Date, default: Date.now },
   draftSavedAt: { type: Date } // Thời gian lưu bản nháp
 });
