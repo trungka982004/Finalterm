@@ -1,224 +1,225 @@
-# Gmail Clone - Simulated Email Service Application
+# Gmail Clone Application
 
-This is a cross-platform email service application developed for the **Cross-Platform Mobile Application Development (502071)** course, Semester 1, Academic Year 2024-2025. The project simulates a Gmail-like email system using Flutter for the frontend and a custom backend (assumed ExpressJS with MongoDB) for data management and real-time communication. The app supports internal email communication, user account management, label organization, and planned AI-powered features like spam detection.
+A comprehensive email application combining a Flutter frontend and a Node.js backend, replicating core Gmail functionalities like email management, user authentication, and profile customization.
 
-## Link URL Project: `https://clone-3cdd9.web.app`
+## Overview
+This repository contains both the frontend and backend for a Gmail Clone app:
+- **Frontend**: A cross-platform Flutter app (mobile, web) with a responsive UI for seamless email and profile management.
+- **Link URl Frontend**: `https://mail-mkjc.onrender.com`
+- **Backend**: A REST API built with Node.js and Express.js, using MongoDB for data storage, Cloudinary for file uploads, and Socket.IO for real-time notifications.
+- **Link URl Backend**: `https://gmail-backend-1-wlx4.onrender.com`
 
-## Project Overview
+## Features
+- **User Authentication**:
+  - Register, login, forgot password, and change password using phone number and OTP.
+  - Two-factor authentication (2FA) via email OTP.
+- **Email Management**:
+  - Send, reply, forward, save drafts, star, mark read/unread, move to trash, and permanently delete emails.
+  - Advanced search by keyword, sender, recipient, date range, and attachments.
+  - Support for attachments (JPEG, PNG, PDF, 10MB limit).
+- **Labels**:
+  - Create, rename, delete, and assign custom labels to emails.
+  - System "Spam" label for suspicious emails.
+- **Spam Detection**:
+  - Rule-based detection using keywords, link count, unverified senders, and attachment size.
+  - Spam emails are moved to the "spam" folder with a "Spam" label.
+- **Auto Reply**: Configure automatic responses for incoming emails.
+- **Real-Time Notifications**: Socket.IO for new email alerts.
+- **Profile Management**:
+  - Update name, email, and profile picture (.jpg, .jpeg, .png, 5MB limit).
+  - Enable/disable 2FA and toggle light/dark themes.
+- **Cross-Platform**: Responsive UI for mobile, tablet, and web.
 
-The application is designed to run on mobile (Android) and web platforms, providing a responsive, user-friendly interface with Material Design, animations, and theme support. It uses HTTP APIs for core operations (e.g., authentication, email management) and WebSocket for real-time notifications. All user data, emails, and labels are stored in a database (MongoDB assumed), enabling cross-device access. The system restricts communication to internal users, eliminating the need for standard email protocols (IMAP/POP/SMTP).
+## Technologies Used
+### Frontend
+- **Flutter (Dart)**: Cross-platform UI framework.
+- **Provider**: State management.
+- **Key Dependencies**:
+  - `http`: API requests.
+  - `image_picker`: Profile picture uploads.
+  - `shared_preferences`: Token storage.
+  - `email_validator`: Email validation.
+  - `html_editor_enhanced`: Rich text email composition.
+  - See `frontend/pubspec.yaml` for details.
 
-## Implemented and Planned Features
+### Backend
+- **Node.js & Express.js**: Backend framework.
+- **MongoDB & Mongoose**: Database and ORM.
+- **JWT**: Token-based authentication.
+- **Cloudinary**: File storage for attachments and profile pictures.
+- **Socket.IO**: Real-time WebSocket communication.
+- **Nodemailer**: OTP email sending.
+- **Multer**: File upload handling.
+- **Bcrypt**: Password hashing.
+- **dotenv**: Environment variable management.
 
-The project implements a subset of the required features from the rubric (see "502071 - Final Project.pdf") and plans additional features for full compliance. Below is a summary of the status:
-
-### Account Management (1.5 points)
-- **Registration (0.25 points)**: Implemented (`register_page.dart`). Users register with phone number and password.
-- **Login (0.25 points)**: Implemented (`login_page.dart`). Supports phone number, password, and OTP for 2FA.
-- **Password Management (0.5 points)**:
-  - Change Password (0.25 points): Planned (`change_password_page.dart` assumed).
-  - Password Recovery (0.25 points): Planned (`forgot_password_page.dart` assumed).
-- **Two-step Verification (0.25 points)**: Implemented (`profile_page.dart`). Toggle 2FA, requires verified email.
-- **Profile Management (0.75 points)**:
-  - View Profile Info and Picture (0.25 points): Implemented (`profile_page.dart`).
-  - Change Profile Info (0.25 points): Implemented (`profile_page.dart`, `profile_setup_page.dart`).
-  - Change Profile Image (0.25 points): Implemented (`profile_page.dart`, `profile_setup_page.dart`).
-
-### Compose and Send Email (2.5 points)
-- **Send Simple Text Email (0.25 points)**: Planned (`compose_screen.dart` assumed).
-- **Auto Save as Draft (0.25 points)**: Planned.
-- **Reply and Forward (0.5 points)**: Planned (`email_detail_page.dart` assumed).
-- **Send Email in CC and BCC (0.25 points)**: Planned.
-- **Advanced Text Editing with WYSIWYG (0.25 points)**: Planned.
-- **Sending and Receiving Attachments (0.25 points)**: Planned.
-- **Email Actions (0.5 points)**: Planned (view metadata, assign labels, mark read/unread, move to trash).
-- **Star Email (0.25 points)**: Planned.
-
-### Email Management and Settings (4.0 points)
-- **View Emails in Categories (0.5 points)**: Planned (`home_page.dart` assumed for Inbox, Sent, Draft, Starred, Trash).
-- **View Email List in Basic/Detail View (0.5 points)**: Planned.
-- **Search Email by Keywords (0.5 points)**: Planned (`search_page.dart` assumed).
-- **Advanced Searching (0.5 points)**: Planned.
-- **Label Management (0.75 points)**:
-  - Manage Labels (0.25 points): Implemented (`labels_page.dart`).
-  - Add/Remove Labels (0.25 points): Planned.
-  - View Emails by Label (0.25 points): Implemented (`labels_page.dart` callback).
-- **Notifications (0.5 points)**:
-  - Display Notification (0.25 points): Planned (WebSocket integration assumed).
-  - Realtime Inbox Update (0.25 points): Planned.
-- **User Settings (0.5 points)**: Partially implemented (`profile_page.dart` for dark mode). Planned for notification settings, font preferences, and auto-answer mode (`settings_page.dart` assumed).
-- **Auto Answer (0.25 points)**: Planned (`auto_reply_page.dart` assumed).
-
-### Others (2.0 points)
-- **UI and UX (1.0 point)**: Partially implemented. Responsive design, animations, and Material Design components.
-- **Deployment Web Version (0.5 points)**: Planned (Firebase Hosting or Netlify).
-- **Teamwork (0.5 points)**: Assumed active GitHub collaboration with regular commits.
-
-### Bonus Features (up to 1.0 point)
-- **AI/ML Integration**: Planned spam detection (0.25 points) with backend ML model and frontend UI (Spam folder, spam status display).
-
-### Total Points
-- **Implemented**: ~3.0 points (Account Management: 1.5, Label Management: 0.5, Settings: 0.5 partial, UI/UX: 0.5 partial).
-- **Planned**: ~6.5 points (remaining email, search, notification, and settings features).
-- **Bonus**: Up to 0.25 points for spam detection.
-- **Backend Bonus**: 0.5 points if custom backend is used.
-
-## Project Structure
-
-### Frontend (Flutter)
-- **Directory**: `lib/`
-- **Key Files**:
-  - `register_page.dart`: User registration with phone number and password.
-  - `login_page.dart`: Login with 2FA support and OTP.
-  - `profile_setup_page.dart`: Initial profile setup with email, name, and picture.
-  - `profile_page.dart`: Profile viewing/editing, 2FA, and dark mode toggle.
-  - `labels_page.dart`: Label management (create, rename, delete, select).
-  - Planned files: `home_page.dart`, `compose_screen.dart`, `email_detail_page.dart`, `search_page.dart`, `settings_page.dart`, `auto_reply_page.dart`, etc.
-- **Dependencies** (from `pubspec.yaml` assumed):
-  - `flutter`, `provider`, `image_picker`, `email_validator`.
-  - Planned: `http`, `web_socket_channel`, WYSIWYG editor package (e.g., `flutter_quill`).
-
-### Backend (Assumed ExpressJS + MongoDB)
-- **Directory**: `server/`
-- **Components**:
-  - **API Endpoints**:
-    - `/api/auth/register`: Register user with phone number.
-    - `/api/auth/login`: Login with phone number, password, and OTP.
-    - `/api/auth/update-profile`: Update user profile and picture.
-    - `/api/auth/toggle-2fa`: Enable/disable 2FA.
-    - `/api/labels`: CRUD operations for labels.
-    - Planned: `/api/emails` for email operations, `/api/search` for search, `/api/spam` for spam detection.
-  - **WebSocket**: Real-time notifications for new emails (`/ws` endpoint assumed).
-  - **Database**: MongoDB for storing users, emails, labels, and settings.
-  - **ML Model**: Planned for spam detection (e.g., using TensorFlow.js or Python API).
-- **Dependencies** (assumed):
-  - `express`, `mongoose`, `jsonwebtoken`, `ws`, `multer` (file uploads), `nodemailer` (for password recovery).
+## Prerequisites
+- **Frontend**:
+  - Flutter SDK: `>=3.0.0 <4.0.0`
+  - Dart SDK
+  - Android Studio/Xcode for emulator or device
+  - Web browser (for web platform)
+- **Backend**:
+  - Node.js (v16 or higher)
+  - MongoDB Atlas account
+  - Cloudinary account
+  - Gmail account for Nodemailer (App Password for 2FA-enabled accounts)
 
 ## Setup Instructions
-
-### Frontend
 1. **Clone the Repository**:
    ```bash
-   git clone <repository-url>
-   cd gmail_clone
+   git clone https://github.com/trungka982004/Finalterm.git
+   cd Finalteem
    ```
-2. **Install Dependencies**:
+
+### Frontend Setup
+2. **Navigate to Frontend Directory**:
+   ```bash
+   cd frontend
+   ```
+3. **Install Dependencies**:
    ```bash
    flutter pub get
    ```
-3. **Configure Backend URL**:
-   - Update API base URL in `AuthService` and `EmailService` (e.g., `http://localhost:3000` or hosted URL).
-   - Set WebSocket URL for notifications.
-4. **Run the App**:
-   - Mobile (Android):
-     ```bash
-     flutter run
-     ```
-   - Web:
-     ```bash
-     flutter run -d chrome
-     ```
-5. **Build for Deployment**:
-   - Android APK (ARM64):
-     ```bash
-     flutter build apk --target-platform android-arm64
-     ```
-   - Web:
-     ```bash
-     flutter build web
-     ```
-
-### Backend
-1. **Navigate to Server Directory**:
+4. **Configure Backend URL**:
+   - Ensure the backend is running (e.g., at `https://gmail-backend-1-wlx4.onrender.com`).
+   - Update `_baseUrlAuth` and `_baseUrlUser` in `frontend/lib/services/auth_service.dart` and `_baseUrl` in `frontend/lib/services/email_service.dart` if using a custom backend URL.
+5. **Run the App**:
    ```bash
-   cd server
+   flutter run
    ```
-2. **Install Dependencies**:
+   Select a device (emulator, physical device, or browser).
+
+### Backend Setup
+2. **Navigate to Backend Directory**:
+   ```bash
+   cd backend
+   ```
+3. **Install Dependencies**:
    ```bash
    npm install
    ```
-3. **Configure Environment**:
-   - Create `.env` file with:
-     ```env
-    MONGODB_URI=<your-mongodb-atlas-connection-string>
-    JWT_SECRET=<your-jwt-secret>
-    CLOUDINARY_CLOUD_NAME=<your-cloudinary-cloud-name>
-    CLOUDINARY_API_KEY=<your-cloudinary-api-key>
-    CLOUDINARY_API_SECRET=<your-cloudinary-api-secret>
-    GMAIL_USER=<your-gmail-address>
-    GMAIL_PASS=<your-gmail-app-password>
-    PORT=3000
-     ```
-   - Ensure MongoDB is running.
-4. **Run the Server**:
-   ```bash
-   node index.js
+4. **Configure Environment Variables**:
+   Create a `backend/.env` file with:
+   ```env
+   MONGODB_URI=<your-mongodb-atlas-uri>
+   JWT_SECRET=<your-jwt-secret>
+   CLOUDINARY_CLOUD_NAME=<your-cloudinary-cloud-name>
+   CLOUDINARY_API_KEY=<your-cloudinary-api-key>
+   CLOUDINARY_API_SECRET=<your-cloudinary-api-secret>
+   GMAIL_USER=<your-gmail-email>
+   GMAIL_PASS=<your-gmail-app-password>
    ```
-5. **Deploy**:
-   - Host on a platform like Heroku, AWS, or Render.
-   - Ensure CORS is configured for frontend access.
+5. **Run the Server**:
+   ```bash
+   npm start
+   ```
+   The server runs at `http://localhost:3000` (or the specified port).
 
-### Test Accounts
-- Phone: `+1234567890`, Password: `test123`
-- Phone: `+0987654321`, Password: `test123`
-- Pre-loaded data (labels, emails) should be seeded in MongoDB.
+## Usage
+1. **Register**: Create an account with a phone number and password.
+2. **Set Up Profile**: Add email, name, and profile picture post-registration.
+3. **Login**: Use phone number and password (OTP required if 2FA enabled).
+4. **Manage Emails**:
+   - View emails in folders (Inbox, Sent, Drafts, Starred, Trash, Spam).
+   - Compose, reply, or forward emails with attachments.
+   - Organize emails with custom labels.
+   - Search emails with advanced filters.
+5. **Profile Settings**:
+   - Update profile or toggle 2FA.
+   - Switch between light/dark themes.
+6. **Auto Reply**: Enable and configure auto-reply messages.
+7. **Notifications**: Receive real-time new email alerts.
 
-## Deployment
+## Project Structure
+### Frontend
+```
+frontend/
+├── lib
+│   ├── main.dart                # App entry point
+│   ├── models
+│   │   └── user.dart            # User model
+│   ├── services
+│   │   ├── auth_service.dart    # Authentication logic
+│   │   └── email_service.dart   # Email API calls
+│   ├── pages
+│   │   ├── home_page.dart       # Email list view
+│   │   ├── email_detail_page.dart # Email details
+│   │   ├── compose_screen.dart  # Email composition
+│   │   ├── labels_page.dart     # Label management
+│   │   ├── profile_page.dart    # User profile
+│   │   ├── register_page.dart   # Registration
+│   │   ├── login_page.dart      # Login
+│   │   ├── profile_setup_page.dart # Profile setup
+│   │   ├── forgot_password_page.dart # Password recovery
+│   │   ├── change_password_page.dart # Password change
+│   │   └── auto_reply_page.dart # Auto-reply settings
+├── assets
+│   └── images
+│       └── logo.png            # App logo
+├── pubspec.yaml               # Dependencies
+```
 
-- **Web**: Deploy frontend to Firebase Hosting or Netlify, backend to Heroku or AWS. Provide public URL (e.g., `https://gmail-clone.web.app`).
-- **Mobile**: Generate Android APK (ARM64) for distribution.
-- **Backend**: Ensure database and WebSocket are accessible from hosted frontend.
+### Backend
+```
+backend/
+├── src
+│   ├── models
+│   │   ├── user.js             # User model
+│   │   ├── email.js            # Email model
+│   │   ├── label.js            # Label model
+│   │   └── autoReply.js        # Auto-reply model
+│   ├── routes
+│   │   ├── auth.js             # Auth APIs
+│   │   ├── user.js             # User management APIs
+│   │   └── email.js            # Email management APIs
+│   ├── middleware
+│   │   └── auth.js             # Authentication middleware
+│   ├── utils
+│   │   ├── spamDetection.js    # Spam detection logic
+│   │   └── socket.js           # Socket.IO handling
+│   ├── app.js                  # Express app setup
+│   └── server.js               # Server entry point
+├── .env                       # Environment variables
+├── package.json               # Dependencies and scripts
+```
 
-## Assumptions
+## API Endpoints
+### Authentication (`/api/auth`)
+- `POST /register`: Register a new user.
+- `POST /login`: Login (supports 2FA with OTP).
+- `POST /forgot-password`: Request OTP for password reset.
+- `POST /reset-password`: Reset password using OTP.
+- `GET /verify-token`: Verify JWT token.
 
-- **Backend**: Implemented with ExpressJS, MongoDB, and WebSocket. APIs follow REST conventions, and JWT handles authentication.
-- **Missing Frontend Files**: Features like email composition, search, and notifications are planned in additional Dart files.
-- **AI/ML**: Spam detection will use a backend ML model (e.g., Naive Bayes) with frontend UI for Spam folder and user feedback.
-- **Session Management**: Frontend persists login state using secure storage; backend validates JWT tokens.
-- **Cross-Device Sync**: MongoDB ensures data consistency across devices.
+### User Management (`/api/user`)
+- `GET /profile`: Get user profile.
+- `POST /update-profile`: Update profile (email, name, picture).
+- `POST /change-password`: Change password.
+- `POST /toggle-2fa`: Enable/disable 2FA.
 
-## Future Improvements
+### Email Management (`/api/email`)
+- `POST /send`: Send email with attachments, CC, BCC.
+- `POST /save-draft`: Save email draft.
+- `POST /reply/:emailId`: Reply to an email.
+- `POST /forward/:emailId`: Forward an email.
+- `GET /list/:folder`: List emails in a folder.
+- `PATCH /mark-read/:emailId`: Mark as read/unread.
+- `PATCH /star/:emailId`: Star/unstar email.
+- `PATCH /move-to-trash/:emailId`: Move to trash.
+- `GET /search`: Search emails.
+- `POST /labels`: Create a label.
+- `DELETE /labels/:labelId`: Delete a label.
+- `PATCH /labels/:labelId`: Update label name.
+- `PATCH /emails/:emailId/labels`: Assign/remove label.
+- `GET /labels`: List labels.
+- `POST /auto-reply`: Configure auto-reply.
+- `GET /emails/:emailId`: Get email details.
+- `DELETE /:emailId`: Permanently delete email.
 
-- Implement email composition with WYSIWYG editor and attachments.
-- Add email list views (basic/detailed) and folder navigation.
-- Integrate search (basic and advanced) with filters.
-- Enable real-time notifications via WebSocket.
-- Add auto-answer mode with customizable responses.
-- Implement AI-powered spam detection with user feedback.
-- Enhance accessibility and add unit tests.
-- Optimize performance for large email datasets.
-
-## Submission Checklist
-
-- **Source**:
-  - `lib/`: Flutter source code.
-  - `server/`: Backend source code.
-  - `pubspec.yaml` and `package.json`.
-- **Bin**:
-  - `bin/android.apk`: Android APK (ARM64).
-  - `bin/web/`: Web build files.
-- **Demo**: `demo.mp4` (1080p) showcasing all features.
-- **Git**: `git/` with GitHub contribution screenshots (2+ commits/week/member, 1+ month).
-- **Readme.txt**:
-  - Build/run instructions.
-  - Test account credentials.
-  - Backend URL and WebSocket endpoint.
-  - Bonus feature details (spam detection).
-- **Bonus**: `Bonus/` with spam detection description and evidence.
-- **Rubrik.docx**: Self-assessed 30 features, web URL, and login credentials.
-- **Archive**: `id1_fullname1_id2_fullname2.zip`, submitted via e-learning.
-- **Clean Project**: Run `flutter clean` and `npm prune` before archiving.
-
-## Notes
-
-- **Bonus Points**: Custom backend (+0.5 points) and spam detection (+0.25 points) are targeted.
-- **Plagiarism**: Code is original, and GitHub commits reflect team effort.
-- **Grading Info**: All required details (usernames, URLs) will be in `Readme.txt` and `Rubrik.docx`.
-- **Deductions**: Avoid late submission, ensure clear instructions, and clean project files.
-
-## Team Information
-- Team: <520H0341_NguyenThaiBao_id2_name2>
-- GitHub Repository: <github-url>
-- Submission Date: June 05, 2025
-
-Thank you for evaluating our project!
+## Contributing
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature-name`.
+3. Commit changes: `git commit -m "Add feature-name"`.
+4. Push to the branch: `git push origin feature-name`.
+5. Open a pull request.

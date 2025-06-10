@@ -13,10 +13,10 @@ class AuthService extends ChangeNotifier {
   bool _isFetchingProfile = false; // Prevent multiple simultaneous getProfile calls
   final String _baseUrlAuth = kIsWeb
       ? 'https://gmail-backend-1-wlx4.onrender.com/api/auth'
-      : 'http://192.168.2.62:3000/api/auth'; // Consistent IP
+      : 'https://gmail-backend-1-wlx4.onrender.com/api/auth'; // Consistent IP
   final String _baseUrlUser = kIsWeb
       ? 'https://gmail-backend-1-wlx4.onrender.com/api/user'
-      : 'http://192.168.2.62:3000/api/user'; // Consistent IP
+      : 'https://gmail-backend-1-wlx4.onrender.com/api/user'; // Consistent IP
 
   String? get token => _token;
   User? get user => _user;

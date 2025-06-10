@@ -1,5 +1,3 @@
-// lib/pages/change_password_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
@@ -12,11 +10,12 @@ class ChangePasswordPage extends StatefulWidget {
 }
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTickerProviderStateMixin {
-  // --- ĐÃ XÓA ---
-  // final _phoneController = TextEditingController(); 
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _oldPasswordFocusNode = FocusNode();
+  final _newPasswordFocusNode = FocusNode();
+  final _confirmPasswordFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
   bool _isOldPasswordVisible = false;
   bool _isNewPasswordVisible = false;
@@ -46,27 +45,26 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
   @override
   void dispose() {
     _animationController.dispose();
-    // --- ĐÃ XÓA ---
-    // _phoneController.dispose(); 
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _oldPasswordFocusNode.dispose();
+    _newPasswordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _changePassword() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isLoading) return;
 
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
     try {
-      // --- ĐÃ SỬA ---
-      // Lệnh gọi hàm không còn tham số phone
       final success = await authService.changePassword(
         _oldPasswordController.text,
         _newPasswordController.text,
         _confirmPasswordController.text,
-      ); //
+      );
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -78,7 +76,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
       }
     } catch (e) {
       setState(() => _error = e.toString());
-      if(mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(_error ?? 'An error occurred'),
@@ -88,7 +86,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
         );
       }
     } finally {
-      if(mounted) {
+      if (mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -170,7 +168,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                         ),
                                         const SizedBox(height: 16),
                                         const Text(
-                                          'Change Password', // Tiêu đề đơn giản hơn
+                                          'Change Password',
                                           style: TextStyle(
                                             fontSize: 24,
                                             fontWeight: FontWeight.bold,
@@ -179,11 +177,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                           textAlign: TextAlign.center,
                                         ),
                                         const SizedBox(height: 24),
-                                        
-                                        // --- WIDGET CỦA PHONE ĐÃ BỊ XÓA KHỎI ĐÂY ---
-
                                         TextFormField(
                                           controller: _oldPasswordController,
+                                          focusNode: _oldPasswordFocusNode,
                                           obscureText: !_isOldPasswordVisible,
                                           decoration: InputDecoration(
                                             labelText: 'Old Password',
@@ -206,10 +202,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) {
+                                            _newPasswordFocusNode.requestFocus();
+                                          },
                                         ),
                                         const SizedBox(height: 16),
                                         TextFormField(
                                           controller: _newPasswordController,
+                                          focusNode: _newPasswordFocusNode,
                                           obscureText: !_isNewPasswordVisible,
                                           decoration: InputDecoration(
                                             labelText: 'New Password',
@@ -230,15 +230,19 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                             if (value == null || value.isEmpty) {
                                               return 'Please enter your new password';
                                             }
-                                            if (value.length < 8) { // Nhất quán với backend
+                                            if (value.length < 8) {
                                               return 'Password must be at least 8 characters';
                                             }
                                             return null;
+                                          },
+                                          onFieldSubmitted: (_) {
+                                            _confirmPasswordFocusNode.requestFocus();
                                           },
                                         ),
                                         const SizedBox(height: 16),
                                         TextFormField(
                                           controller: _confirmPasswordController,
+                                          focusNode: _confirmPasswordFocusNode,
                                           obscureText: !_isConfirmPasswordVisible,
                                           decoration: InputDecoration(
                                             labelText: 'Confirm Password',
@@ -264,6 +268,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) => _changePassword(),
                                         ),
                                       ],
                                     ),
@@ -299,13 +304,12 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> with SingleTick
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                // Nút quay lại trang chủ/profile hoặc pop()
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     TextButton(
                                       onPressed: () {
-                                        Navigator.pop(context); // Đơn giản là quay lại
+                                        Navigator.pop(context);
                                       },
                                       child: const Text(
                                         'Back',

@@ -10,7 +10,7 @@ import 'labels_page.dart';
 import 'auto_reply_page.dart';
 import 'profile_page.dart';
 import 'package:intl/intl.dart';
-import '../main.dart'; // Import for ThemeProvider
+import '../main.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,11 +23,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
   String _currentFolder = 'inbox';
+  Timer? _debounce;
   String? _currentLabelId;
   String? _currentLabelName;
   List<Map<String, dynamic>> _emails = [];
   List<Map<String, dynamic>> _labels = [];
   bool _isLoading = false;
+  bool _isEmailListLoading = false;
   bool _isNavigating = false;
   late IO.Socket _socket;
   late AnimationController _animationController;
@@ -35,22 +37,36 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   bool _isDisposed = false;
   bool _isSearching = false;
   String _keyword = '';
+  String _tempKeyword = '';
   String _from = '';
+  String _tempFrom = '';
   String _to = '';
+  String _tempTo = '';
   bool _hasAttachment = false;
   DateTime? _startDate;
   DateTime? _endDate;
   late AnimationController _advancedPanelController;
   late Animation<Offset> _slideAnimation;
   bool _showAdvancedPanel = false;
-
   bool _showNotificationBanner = false;
   Map<String, dynamic>? _notificationData;
   Timer? _notificationTimer;
+  late TextEditingController _searchController;
+  late TextEditingController _fromController;
+  late TextEditingController _toController;
+  late FocusNode _searchFocusNode;
+  late FocusNode _fromFocusNode;
+  late FocusNode _toFocusNode;
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController(text: _keyword);
+    _fromController = TextEditingController(text: _from);
+    _toController = TextEditingController(text: _to);
+    _searchFocusNode = FocusNode();
+    _fromFocusNode = FocusNode();
+    _toFocusNode = FocusNode();
     _fetchEmails();
     _fetchLabels();
     _initSocket();
@@ -65,8 +81,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _slideAnimation = Tween<Offset>(begin: const Offset(0.0, 1.0), end: Offset.zero)
-        .animate(
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0.0, 1.0), end: Offset.zero).animate(
       CurvedAnimation(
           parent: _advancedPanelController, curve: Curves.easeInOut),
     );
@@ -101,25 +117,46 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _fetchEmails() async {
-    if (_isLoading || _isDisposed) return;
+    if (_isEmailListLoading || _isDisposed) return;
     setState(() {
-      if (!_isDisposed) _isLoading = true;
+      if (!_isDisposed) _isEmailListLoading = true;
     });
     final emailService = Provider.of<EmailService>(context, listen: false);
     try {
-      final emails =
-          await emailService.listEmails(_currentFolder, labelId: _currentLabelId);
+      final emails = await emailService.listEmails(_currentFolder,
+          labelId: _currentLabelId);
       if (mounted && !_isDisposed) {
         setState(() {
           _emails = emails;
-          _isLoading = false;
+          _isEmailListLoading = false;
+          _keyword = _tempKeyword;
+          _from = _tempFrom;
+          _to = _tempTo;
+          _searchController.text = _keyword;
+          _fromController.text = _from;
+          _toController.text = _to;
         });
         _animationController.forward(from: 0.0);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_searchFocusNode.hasFocus) {
+            _searchController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _searchController.text.length),
+            );
+          } else if (_fromFocusNode.hasFocus) {
+            _fromController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _fromController.text.length),
+            );
+          } else if (_toFocusNode.hasFocus) {
+            _toController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _toController.text.length),
+            );
+          }
+        });
       }
     } catch (e) {
       if (mounted && !_isDisposed) {
         setState(() {
-          _isLoading = false;
+          _isEmailListLoading = false;
         });
         _scaffoldMessengerKey.currentState?.showSnackBar(
             SnackBar(content: Text('Failed to load emails: ${e.toString()}')));
@@ -145,12 +182,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _searchEmails() async {
-    if (_isLoading || _isDisposed) return;
+    if (_isEmailListLoading || _isDisposed) return;
     setState(() {
-      if (!_isDisposed) _isLoading = true;
+      if (!_isDisposed) _isEmailListLoading = true;
     });
     final emailService = Provider.of<EmailService>(context, listen: false);
     try {
+      print(
+          'Searching with keyword: $_keyword, from: $_from, to: $_to, startDate: $_startDate, endDate: $_endDate');
       final emails = await emailService.searchEmails(
         keyword: _keyword.isNotEmpty ? _keyword : null,
         from: _from.isNotEmpty ? _from : null,
@@ -162,20 +201,38 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       if (mounted && !_isDisposed) {
         setState(() {
           _emails = emails;
-          _isLoading = true;
+          _isEmailListLoading = false;
+          _keyword = _tempKeyword;
+          _from = _tempFrom;
+          _to = _tempTo;
+          _searchController.text = _keyword;
+          _fromController.text = _from;
+          _toController.text = _to;
         });
         await Future.delayed(const Duration(milliseconds: 300));
         if (mounted && !_isDisposed) {
-          setState(() {
-            _isLoading = false;
-          });
           _animationController.forward(from: 0.0);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_searchFocusNode.hasFocus) {
+              _searchController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _searchController.text.length),
+              );
+            } else if (_fromFocusNode.hasFocus) {
+              _fromController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _fromController.text.length),
+              );
+            } else if (_toFocusNode.hasFocus) {
+              _toController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _toController.text.length),
+              );
+            }
+          });
         }
       }
     } catch (e) {
       if (mounted && !_isDisposed) {
         setState(() {
-          _isLoading = false;
+          _isEmailListLoading = false;
         });
         _scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
             content: Text('Failed to search emails: ${e.toString()}')));
@@ -196,8 +253,29 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       if (mounted && !_isDisposed) {
         setState(() {
           _isLoading = false;
+          _keyword = _tempKeyword;
+          _from = _tempFrom;
+          _to = _tempTo;
+          _searchController.text = _keyword;
+          _fromController.text = _from;
+          _toController.text = _to;
         });
         _initSocket();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_searchFocusNode.hasFocus) {
+            _searchController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _searchController.text.length),
+            );
+          } else if (_fromFocusNode.hasFocus) {
+            _fromController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _fromController.text.length),
+            );
+          } else if (_toFocusNode.hasFocus) {
+            _toController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _toController.text.length),
+            );
+          }
+        });
       }
     } catch (e) {
       if (mounted && !_isDisposed) {
@@ -222,7 +300,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (authService.user?.email == null) return;
 
-    _socket = IO.io('https://gmail-backend-1-wlx4.onrender.com', <String, dynamic>{
+    _socket =
+        IO.io('https://gmail-backend-1-wlx4.onrender.com', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': true,
     });
@@ -241,8 +320,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> _showLabelDialog(
       String emailId, List<dynamic> currentLabels) async {
     final emailService = Provider.of<EmailService>(context, listen: false);
-    final selectedLabels =
-        List<String>.from(currentLabels.map((label) => label['_id'].toString()));
+    final selectedLabels = List<String>.from(
+        currentLabels.map((label) => label['_id'].toString()));
     final tempSelectedLabels = List<String>.from(selectedLabels);
 
     if (!mounted || _isDisposed) return;
@@ -280,7 +359,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: TextStyle(color: Theme.of(context).colorScheme.secondary)),
+                  child: Text('Cancel',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.secondary)),
                 ),
                 TextButton(
                   onPressed: () async {
@@ -288,7 +369,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     try {
                       for (var labelId in tempSelectedLabels) {
                         if (!selectedLabels.contains(labelId)) {
-                          await emailService.assignLabel(emailId, labelId, 'add');
+                          await emailService.assignLabel(
+                              emailId, labelId, 'add');
                         }
                       }
                       for (var labelId in selectedLabels) {
@@ -313,7 +395,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       }
                     }
                   },
-                  child: Text('Apply', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                  child: Text('Apply',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary)),
                 ),
               ],
             );
@@ -359,7 +443,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final emailService = Provider.of<EmailService>(context, listen: false);
     final emailId = email['_id'];
     final removedEmail = _emails[index];
-    
+
     setState(() {
       _emails.removeAt(index);
     });
@@ -396,6 +480,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _animationController.dispose();
     _advancedPanelController.dispose();
     _notificationTimer?.cancel();
+    _debounce?.cancel();
+    _searchController.dispose();
+    _fromController.dispose();
+    _toController.dispose();
+    _searchFocusNode.dispose();
+    _fromFocusNode.dispose();
+    _toFocusNode.dispose();
     super.dispose();
   }
 
@@ -450,10 +541,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           child: ListTile(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: Icon(Icons.mark_email_unread_outlined, color: Theme.of(context).colorScheme.primary),
+            leading: Icon(Icons.mark_email_unread_outlined,
+                color: Theme.of(context).colorScheme.primary),
             title: Text(
               'New Email from: ${_notificationData?['sender'] ?? ''}',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -461,10 +555,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               '${_notificationData?['subject'] ?? '(No subject)'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             trailing: IconButton(
-              icon: Icon(Icons.close, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              icon: Icon(Icons.close,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
               onPressed: _hideNewEmailBanner,
             ),
             onTap: () {
@@ -480,7 +577,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    final themeProvider = Provider.of<ThemeProvider>(context); // Access ThemeProvider
+    final themeProvider = Provider.of<ThemeProvider>(context);
     final user = authService.user;
 
     Widget body;
@@ -508,232 +605,302 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     } else {
       body = RefreshIndicator(
         onRefresh: _reloadPage,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_currentLabelId != null && !_isSearching)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Chip(
-                        label: Text(_currentLabelName ?? 'Label'),
-                        deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
+        child: Column(
+          children: [
+            if (_currentLabelId != null && !_isSearching)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Chip(
+                  label: Text(_currentLabelName ?? 'Label'),
+                  deleteIcon: Icon(Icons.close,
+                      size: 18, color: Theme.of(context).colorScheme.onSurface),
+                  onDeleted: () {
+                    if (mounted && !_isDisposed) {
+                      setState(() {
+                        _currentLabelId = null;
+                        _currentLabelName = null;
+                      });
+                      _fetchEmails();
+                    }
+                  },
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  labelStyle:
+                      TextStyle(color: Theme.of(context).colorScheme.primary),
+                ),
+              ),
+            if (_isSearching &&
+                (_keyword.isNotEmpty ||
+                    _from.isNotEmpty ||
+                    _to.isNotEmpty ||
+                    _hasAttachment ||
+                    _startDate != null ||
+                    _endDate != null))
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    if (_keyword.isNotEmpty)
+                      Chip(
+                        label: Text('Keyword: $_keyword'),
+                        deleteIcon: Icon(Icons.close,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
                         onDeleted: () {
                           if (mounted && !_isDisposed) {
                             setState(() {
-                              _currentLabelId = null;
-                              _currentLabelName = null;
+                              _keyword = '';
+                              _tempKeyword = '';
+                              _searchController.text = '';
                             });
-                            _fetchEmails();
+                            _searchEmails();
                           }
                         },
-                        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                        labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary),
                       ),
-                    ),
-                  if (_isSearching &&
-                      (_keyword.isNotEmpty ||
-                          _from.isNotEmpty ||
-                          _to.isNotEmpty ||
-                          _hasAttachment ||
-                          _startDate != null ||
-                          _endDate != null))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Wrap(
-                        spacing: 8,
-                        children: [
-                          if (_keyword.isNotEmpty)
-                            Chip(
-                              label: Text('Keyword: $_keyword'),
-                              deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _keyword = '';
-                                  });
-                                  _searchEmails();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                            ),
-                          if (_from.isNotEmpty)
-                            Chip(
-                              label: Text('From: $_from'),
-                              deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _from = '';
-                                  });
-                                  _searchEmails();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                            ),
-                          if (_to.isNotEmpty)
-                            Chip(
-                              label: Text('To: $_to'),
-                              deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _to = '';
-                                  });
-                                  _searchEmails();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                            ),
-                          if (_hasAttachment)
-                            Chip(
-                              label: const Text('Has Attachment'),
-                              deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _hasAttachment = false;
-                                  });
-                                  _searchEmails();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                            ),
-                          if (_startDate != null)
-                            Chip(
-                              label: Text(
-                                  'From: ${DateFormat.yMd().format(_startDate!)}'),
-                              deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _startDate = null;
-                                  });
-                                  _searchEmails();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                            ),
-                          if (_endDate != null)
-                            Chip(
-                              label: Text(
-                                  'To: ${DateFormat.yMd().format(_endDate!)}'),
-                              deleteIcon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _endDate = null;
-                                  });
-                                  _searchEmails();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
-                            ),
-                          if (_keyword.isNotEmpty ||
-                              _from.isNotEmpty ||
-                              _to.isNotEmpty ||
-                              _hasAttachment ||
-                              _startDate != null ||
-                              _endDate != null)
-                            Chip(
-                              label: const Text('Clear All'),
-                              deleteIcon: Icon(Icons.clear, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                              onDeleted: () {
-                                if (mounted && !_isDisposed) {
-                                  setState(() {
-                                    _isSearching = false;
-                                    _keyword = '';
-                                    _from = '';
-                                    _to = '';
-                                    _hasAttachment = false;
-                                    _startDate = null;
-                                    _endDate = null;
-                                    _showAdvancedPanel = false;
-                                  });
-                                  _fetchEmails();
-                                  _advancedPanelController.reverse();
-                                }
-                              },
-                              backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-                              labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                            ),
-                        ],
-                      ),
-                    ),
-                  Expanded(
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: _emails.length,
-                        itemBuilder: (context, index) {
-                          final email = _emails[index];
-                          return _buildEmailListItem(email, index);
+                    if (_from.isNotEmpty)
+                      Chip(
+                        label: Text('From: $_from'),
+                        deleteIcon: Icon(Icons.close,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
+                        onDeleted: () {
+                          if (mounted && !_isDisposed) {
+                            setState(() {
+                              _from = '';
+                              _tempFrom = '';
+                              _fromController.text = '';
+                            });
+                            _searchEmails();
+                          }
                         },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary),
                       ),
+                    if (_to.isNotEmpty)
+                      Chip(
+                        label: Text('To: $_to'),
+                        deleteIcon: Icon(Icons.close,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
+                        onDeleted: () {
+                          if (mounted && !_isDisposed) {
+                            setState(() {
+                              _to = '';
+                              _tempTo = '';
+                              _toController.text = '';
+                            });
+                            _searchEmails();
+                          }
+                        },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary),
+                      ),
+                    if (_hasAttachment)
+                      Chip(
+                        label: const Text('Has Attachment'),
+                        deleteIcon: Icon(Icons.close,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
+                        onDeleted: () {
+                          if (mounted && !_isDisposed) {
+                            setState(() {
+                              _hasAttachment = false;
+                            });
+                            _searchEmails();
+                          }
+                        },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary),
+                      ),
+                    if (_startDate != null)
+                      Chip(
+                        label: Text(
+                            'From: ${DateFormat.yMd().format(_startDate!)}'),
+                        deleteIcon: Icon(Icons.close,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
+                        onDeleted: () {
+                          if (mounted && !_isDisposed) {
+                            setState(() {
+                              _startDate = null;
+                            });
+                            _searchEmails();
+                          }
+                        },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary),
+                      ),
+                    if (_endDate != null)
+                      Chip(
+                        label:
+                            Text('To: ${DateFormat.yMd().format(_endDate!)}'),
+                        deleteIcon: Icon(Icons.close,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
+                        onDeleted: () {
+                          if (mounted && !_isDisposed) {
+                            setState(() {
+                              _endDate = null;
+                            });
+                            _searchEmails();
+                          }
+                        },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.primary),
+                      ),
+                    if (_keyword.isNotEmpty ||
+                        _from.isNotEmpty ||
+                        _to.isNotEmpty ||
+                        _hasAttachment ||
+                        _startDate != null ||
+                        _endDate != null)
+                      Chip(
+                        label: const Text('Clear All'),
+                        deleteIcon: Icon(Icons.clear,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurface),
+                        onDeleted: () {
+                          if (mounted && !_isDisposed) {
+                            setState(() {
+                              _isSearching = false;
+                              _keyword = '';
+                              _tempKeyword = '';
+                              _from = '';
+                              _tempFrom = '';
+                              _to = '';
+                              _tempTo = '';
+                              _searchController.clear();
+                              _fromController.clear();
+                              _toController.clear();
+                              _hasAttachment = false;
+                              _startDate = null;
+                              _endDate = null;
+                              _showAdvancedPanel = false;
+                            });
+                            _fetchEmails();
+                            _advancedPanelController.reverse();
+                          }
+                        },
+                        backgroundColor:
+                            Theme.of(context).colorScheme.surfaceVariant,
+                        labelStyle: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface),
+                      ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: Stack(
+                children: [
+                  FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: _emails.length,
+                      itemBuilder: (context, index) {
+                        final email = _emails[index];
+                        return _buildEmailListItem(email, index);
+                      },
                     ),
                   ),
-                  if (_emails.isEmpty && !_isLoading)
+                  if (_isEmailListLoading)
+                    const Center(child: CircularProgressIndicator()),
+                  if (_emails.isEmpty && !_isEmailListLoading)
                     SizedBox(
                       height: MediaQuery.of(context).size.height -
                           kToolbarHeight -
                           100,
                       child: Center(
-                        child: Text('No emails found',
-                            style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface)),
+                        child: Text(
+                          'No emails found',
+                          style: TextStyle(
+                              fontSize: 16,
+                              color: Theme.of(context).colorScheme.onSurface),
+                        ),
                       ),
                     ),
                 ],
               ),
+            ),
+          ],
+        ),
       );
     }
 
-    return Consumer<ThemeProvider>( // Wrap with Consumer to react to theme changes
+    return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return Scaffold(
           key: _scaffoldMessengerKey,
           appBar: AppBar(
             title: _isSearching
                 ? TextField(
+                    focusNode: _searchFocusNode,
+                    controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Search emails...',
-                      prefixIcon: Icon(Icons.search, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      prefixIcon: Icon(Icons.search,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                       border: InputBorder.none,
                       filled: true,
                       fillColor: Theme.of(context).colorScheme.surfaceVariant,
                       contentPadding: const EdgeInsets.symmetric(
                           vertical: 10.0, horizontal: 10.0),
                     ),
-                    controller: TextEditingController(text: _keyword),
                     onChanged: (value) {
                       if (mounted && !_isDisposed) {
-                        setState(() {
-                          _keyword = value;
+                        _tempKeyword = value;
+                        if (_isEmailListLoading) return;
+                        _keyword = value;
+                        if (_debounce?.isActive ?? false) _debounce?.cancel();
+                        _debounce =
+                            Timer(const Duration(milliseconds: 750), () {
+                          if (mounted && !_isDisposed) {
+                            _searchEmails();
+                          }
                         });
+                      }
+                    },
+                    onSubmitted: (_) {
+                      if (mounted && !_isDisposed && !_isEmailListLoading) {
+                        _keyword = _tempKeyword;
                         _searchEmails();
                       }
                     },
-                    onSubmitted: (_) => _searchEmails(),
-                    style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).colorScheme.onSurface),
                     cursorColor: Theme.of(context).colorScheme.primary,
                   )
-                : Text('Gmail',
+                : Text(
+                    'Gmail',
                     style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600)),
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontWeight: FontWeight.w600),
+                  ),
             backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
             elevation: 2,
             leading: Builder(
               builder: (context) => IconButton(
-                icon: Icon(Icons.menu, color: Theme.of(context).colorScheme.onSurface),
+                icon: Icon(Icons.menu,
+                    color: Theme.of(context).colorScheme.onSurface),
                 onPressed: _isNavigating || _isLoading
                     ? null
                     : () => Scaffold.of(context).openDrawer(),
@@ -742,7 +909,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             actions: [
               if (!_isSearching)
                 IconButton(
-                  icon: Icon(Icons.search, color: Theme.of(context).colorScheme.onSurface),
+                  icon: Icon(Icons.search,
+                      color: Theme.of(context).colorScheme.onSurface),
                   onPressed: _isNavigating || _isLoading
                       ? null
                       : () {
@@ -750,16 +918,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             setState(() {
                               _isSearching = true;
                             });
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _searchFocusNode.requestFocus();
+                            });
                           }
                         },
                 ),
               if (_isSearching)
                 IconButton(
                   icon: Icon(
-                      _showAdvancedPanel
-                          ? Icons.expand_less
-                          : Icons.expand_more,
-                      color: Theme.of(context).colorScheme.onSurface),
+                    _showAdvancedPanel ? Icons.expand_less : Icons.expand_more,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   onPressed: _isNavigating || _isLoading
                       ? null
                       : () {
@@ -777,7 +947,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ),
               if (_isSearching)
                 IconButton(
-                  icon: Icon(Icons.close, color: Theme.of(context).colorScheme.onSurface),
+                  icon: Icon(Icons.close,
+                      color: Theme.of(context).colorScheme.onSurface),
                   onPressed: _isNavigating || _isLoading
                       ? null
                       : () {
@@ -785,8 +956,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             setState(() {
                               _isSearching = false;
                               _keyword = '';
+                              _tempKeyword = '';
                               _from = '';
+                              _tempFrom = '';
                               _to = '';
+                              _tempTo = '';
+                              _searchController.clear();
+                              _fromController.clear();
+                              _toController.clear();
                               _hasAttachment = false;
                               _startDate = null;
                               _endDate = null;
@@ -810,12 +987,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         },
                   child: CircleAvatar(
                     radius: 18,
-                    backgroundImage:
-                        user?.picture != null ? NetworkImage(user!.picture!) : null,
+                    backgroundImage: user?.picture != null
+                        ? NetworkImage(user!.picture!)
+                        : null,
                     child: user?.picture == null
                         ? Text(
                             user?.name?.substring(0, 1).toUpperCase() ?? 'U',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimary),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onPrimary),
                           )
                         : null,
                   ),
@@ -841,50 +1021,77 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               TextField(
+                                focusNode: _fromFocusNode,
+                                controller: _fromController,
                                 decoration: InputDecoration(
                                   labelText: 'From',
                                   border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8)),
                                   filled: true,
-                                  fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceVariant,
                                 ),
-                                controller: TextEditingController(text: _from),
                                 onChanged: (value) {
                                   if (mounted && !_isDisposed) {
-                                    setState(() {
-                                      _from = value;
+                                    _tempFrom = value;
+                                    if (_isEmailListLoading) return;
+                                    _from = value;
+                                    if (_debounce?.isActive ?? false)
+                                      _debounce?.cancel();
+                                    _debounce = Timer(
+                                        const Duration(milliseconds: 750), () {
+                                      if (mounted && !_isDisposed) {
+                                        _searchEmails();
+                                      }
                                     });
-                                    _searchEmails();
                                   }
                                 },
                               ),
                               const SizedBox(height: 12),
                               TextField(
+                                focusNode: _toFocusNode,
+                                controller: _toController,
                                 decoration: InputDecoration(
                                   labelText: 'To',
                                   border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8)),
                                   filled: true,
-                                  fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceVariant,
                                 ),
-                                controller: TextEditingController(text: _to),
                                 onChanged: (value) {
                                   if (mounted && !_isDisposed) {
-                                    setState(() {
-                                      _to = value;
+                                    _tempTo = value;
+                                    if (_isEmailListLoading) return;
+                                    _to = value;
+                                    if (_debounce?.isActive ?? false)
+                                      _debounce?.cancel();
+                                    _debounce = Timer(
+                                        const Duration(milliseconds: 750), () {
+                                      if (mounted && !_isDisposed) {
+                                        _searchEmails();
+                                      }
                                     });
-                                    _searchEmails();
                                   }
                                 },
                               ),
                               const SizedBox(height: 12),
                               CheckboxListTile(
                                 title: Text('Has Attachment',
-                                    style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface)),
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface)),
                                 value: _hasAttachment,
-                                activeColor: Theme.of(context).colorScheme.primary,
+                                activeColor:
+                                    Theme.of(context).colorScheme.primary,
                                 onChanged: (value) {
-                                  if (mounted && !_isDisposed) {
+                                  if (mounted &&
+                                      !_isDisposed &&
+                                      !_isEmailListLoading) {
                                     setState(() {
                                       _hasAttachment = value ?? false;
                                     });
@@ -897,14 +1104,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 children: [
                                   Expanded(
                                     child: ListTile(
-                                      title: Text(_startDate == null
-                                          ? 'Start Date'
-                                          : DateFormat.yMd().format(_startDate!),
-                                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                                      title: Text(
+                                        _startDate == null
+                                            ? 'Start Date'
+                                            : DateFormat.yMd()
+                                                .format(_startDate!),
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface),
+                                      ),
                                       trailing: Icon(Icons.calendar_today,
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
                                       onTap: () async {
-                                        if (mounted && !_isDisposed) {
+                                        if (mounted &&
+                                            !_isDisposed &&
+                                            !_isEmailListLoading) {
                                           final picked = await showDatePicker(
                                             context: context,
                                             initialDate:
@@ -925,17 +1142,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: ListTile(
-                                      title: Text(_endDate == null
-                                          ? 'End Date'
-                                          : DateFormat.yMd().format(_endDate!),
-                                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                                      title: Text(
+                                        _endDate == null
+                                            ? 'End Date'
+                                            : DateFormat.yMd()
+                                                .format(_endDate!),
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface),
+                                      ),
                                       trailing: Icon(Icons.calendar_today,
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
                                       onTap: () async {
-                                        if (mounted && !_isDisposed) {
+                                        if (mounted &&
+                                            !_isDisposed &&
+                                            !_isEmailListLoading) {
                                           final picked = await showDatePicker(
                                             context: context,
-                                            initialDate: _endDate ?? DateTime.now(),
+                                            initialDate:
+                                                _endDate ?? DateTime.now(),
                                             firstDate: DateTime(2000),
                                             lastDate: DateTime(2100),
                                           );
@@ -967,16 +1195,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   onPressed: _isNavigating || _isLoading
                       ? null
                       : () {
-                          Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => ComposeScreen()))
-                              .then((_) {
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => ComposeScreen())).then((_) {
                             if (mounted && !_isDisposed) {
                               _fetchEmails();
                             }
                           });
                         },
                   backgroundColor: Theme.of(context).colorScheme.primary,
-                  child: Icon(Icons.edit, color: Theme.of(context).colorScheme.onPrimary),
+                  child: Icon(Icons.edit,
+                      color: Theme.of(context).colorScheme.onPrimary),
                   tooltip: 'Compose',
                 ),
         );
@@ -992,10 +1222,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           UserAccountsDrawerHeader(
             accountName: Text(
               user?.name ?? 'User',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurface),
             ),
-            accountEmail:
-                Text(user?.email ?? '', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            accountEmail: Text(user?.email ?? '',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
             currentAccountPicture: CircleAvatar(
               radius: 30,
               backgroundImage:
@@ -1003,21 +1238,27 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               child: user?.picture == null
                   ? Text(
                       user?.name?.substring(0, 1).toUpperCase() ?? 'U',
-                      style:
-                          TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimary),
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onPrimary),
                     )
                   : null,
             ),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Theme.of(context).colorScheme.surface, Theme.of(context).colorScheme.surfaceVariant],
+                colors: [
+                  Theme.of(context).colorScheme.surface,
+                  Theme.of(context).colorScheme.surfaceVariant
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
             otherAccountsPictures: [
               IconButton(
-                icon: Icon(Icons.logout, color: Theme.of(context).colorScheme.onSurface),
+                icon: Icon(Icons.logout,
+                    color: Theme.of(context).colorScheme.onSurface),
                 onPressed: _isNavigating || _isLoading
                     ? null
                     : () async {
@@ -1050,10 +1291,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
           ),
-          ..._labels.map((label) => _buildLabelItem(label['_id'], label['name'])),
+          ..._labels
+              .map((label) => _buildLabelItem(label['_id'], label['name'])),
           ListTile(
-            leading: Icon(Icons.label_outline, color: Theme.of(context).colorScheme.onSurface),
-            title: Text('Manage Labels', style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurface)),
+            leading: Icon(Icons.label_outline,
+                color: Theme.of(context).colorScheme.onSurface),
+            title: Text('Manage Labels',
+                style: TextStyle(
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSurface)),
             onTap: _isNavigating || _isLoading
                 ? null
                 : () {
@@ -1074,8 +1320,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   _currentFolder = 'inbox';
                                   _isSearching = false;
                                   _keyword = '';
+                                  _tempKeyword = '';
                                   _from = '';
+                                  _tempFrom = '';
                                   _to = '';
+                                  _tempTo = '';
+                                  _searchController.clear();
+                                  _fromController.clear();
+                                  _toController.clear();
                                   _hasAttachment = false;
                                   _startDate = null;
                                   _endDate = null;
@@ -1094,32 +1346,42 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
           const Divider(height: 1, thickness: 1, color: Colors.grey),
           ListTile(
-            leading: Icon(Icons.reply_all_outlined, color: Theme.of(context).colorScheme.onSurface),
-            title: Text('Auto Reply', style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurface)),
+            leading: Icon(Icons.reply_all_outlined,
+                color: Theme.of(context).colorScheme.onSurface),
+            title: Text('Auto Reply',
+                style: TextStyle(
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSurface)),
             onTap: _isNavigating || _isLoading
                 ? null
                 : () {
                     Navigator.pop(context);
                     if (mounted && !_isDisposed) {
                       _isNavigating = true;
-                      Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => AutoReplyPage()))
-                          .then((_) {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => AutoReplyPage())).then((_) {
                         _isNavigating = false;
                       });
                     }
                   },
           ),
           ListTile(
-            leading: Icon(Icons.lock_outline, color: Theme.of(context).colorScheme.onSurface),
-            title: Text('Change Password', style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurface)),
+            leading: Icon(Icons.lock_outline,
+                color: Theme.of(context).colorScheme.onSurface),
+            title: Text('Change Password',
+                style: TextStyle(
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSurface)),
             onTap: _isNavigating || _isLoading
                 ? null
                 : () {
                     Navigator.pop(context);
                     if (mounted && !_isDisposed) {
                       _isNavigating = true;
-                      Navigator.pushNamed(context, '/change-password').then((_) {
+                      Navigator.pushNamed(context, '/change-password')
+                          .then((_) {
                         _isNavigating = false;
                       });
                     }
@@ -1131,16 +1393,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildDrawerItem(IconData icon, String title, String folderName) {
-    final isSelected =
-        _currentFolder == folderName && _currentLabelId == null && !_isSearching;
+    final isSelected = _currentFolder == folderName &&
+        _currentLabelId == null &&
+        !_isSearching;
     return ListTile(
-      leading: Icon(icon, color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface),
+      leading: Icon(icon,
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurface),
       title: Text(
         title,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           fontSize: 15,
-          color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurface,
         ),
       ),
       selected: isSelected,
@@ -1155,8 +1423,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   _currentLabelName = null;
                   _isSearching = false;
                   _keyword = '';
+                  _tempKeyword = '';
                   _from = '';
+                  _tempFrom = '';
                   _to = '';
+                  _tempTo = '';
+                  _searchController.clear();
+                  _fromController.clear();
+                  _toController.clear();
                   _hasAttachment = false;
                   _startDate = null;
                   _endDate = null;
@@ -1172,13 +1446,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Widget _buildLabelItem(String labelId, String labelName) {
     final isSelected = _currentLabelId == labelId && !_isSearching;
     return ListTile(
-      leading: Icon(Icons.label, color: Theme.of(context).colorScheme.onSurface),
+      leading:
+          Icon(Icons.label, color: Theme.of(context).colorScheme.onSurface),
       title: Text(
         labelName,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           fontSize: 15,
-          color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurface,
         ),
       ),
       selected: isSelected,
@@ -1193,8 +1470,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   _currentFolder = 'inbox';
                   _isSearching = false;
                   _keyword = '';
+                  _tempKeyword = '';
                   _from = '';
+                  _tempFrom = '';
                   _to = '';
+                  _tempTo = '';
+                  _searchController.clear();
+                  _fromController.clear();
+                  _toController.clear();
                   _hasAttachment = false;
                   _startDate = null;
                   _endDate = null;
@@ -1220,11 +1503,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            Icon(Icons.mark_email_read_outlined, color: Theme.of(context).colorScheme.onPrimary),
+            Icon(Icons.mark_email_read_outlined,
+                color: Theme.of(context).colorScheme.onPrimary),
             const SizedBox(width: 8),
             Text(
-              isUnread ? 'Mark as Read' : 'Mark as Unread',
-              style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.bold),
+              isUnread ? 'Mark as read.' : 'Mark as unread',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -1238,10 +1524,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           children: [
             Text(
               'Move to Trash',
-              style: TextStyle(color: Theme.of(context).colorScheme.onError, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onError,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.onError),
+            Icon(Icons.delete_outline,
+                color: Theme.of(context).colorScheme.onError),
           ],
         ),
       ),
@@ -1260,16 +1549,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: isUnread ? Theme.of(context).colorScheme.primary.withOpacity(0.05) : Theme.of(context).colorScheme.surface,
-          border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant, width: 0.8)),
+          color: isUnread
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
+              : Theme.of(context).colorScheme.surface,
+          border: Border(
+              bottom: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  width: 0.8)),
         ),
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+            backgroundColor:
+                Theme.of(context).colorScheme.primary.withOpacity(0.8),
             child: Text(
-              (_getDisplayAddress(email).isNotEmpty ? _getDisplayAddress(email)[0] : '?').toUpperCase(),
-              style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.w600),
+              (_getDisplayAddress(email).isNotEmpty
+                      ? _getDisplayAddress(email)[0]
+                      : '?')
+                  .toUpperCase(),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontWeight: FontWeight.w600),
             ),
           ),
           title: Row(
@@ -1291,7 +1592,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 _formatDateTime(email['sentAt']),
                 style: TextStyle(
                   fontSize: 12,
-                  color: isUnread ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: isUnread
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
@@ -1302,7 +1605,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             style: TextStyle(
               fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
               fontSize: 14,
-              color: isUnread ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: isUnread
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1310,13 +1615,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           trailing: IconButton(
             icon: Icon(
               email['isStarred'] == true ? Icons.star : Icons.star_border,
-              color: email['isStarred'] == true ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: email['isStarred'] == true
+                  ? Theme.of(context).colorScheme.secondary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             onPressed: _isNavigating || _isLoading
                 ? null
                 : () async {
-                    final emailService = Provider.of<EmailService>(context, listen: false);
-                    await emailService.starEmail(email['_id'], email['isStarred'] != true);
+                    final emailService =
+                        Provider.of<EmailService>(context, listen: false);
+                    await emailService.starEmail(
+                        email['_id'], email['isStarred'] != true);
                     if (mounted && !_isDisposed) {
                       _fetchEmails();
                     }
@@ -1330,7 +1639,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => EmailDetailPage(emailId: email['_id']),
+                        builder: (context) =>
+                            EmailDetailPage(emailId: email['_id']),
                       ),
                     ).then((_) {
                       _isNavigating = false;

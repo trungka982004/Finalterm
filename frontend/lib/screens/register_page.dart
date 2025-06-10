@@ -14,6 +14,9 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
+  final _passwordFocusNode = FocusNode();
+  final _confirmPasswordFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
@@ -45,11 +48,14 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isLoading) return;
 
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -163,6 +169,7 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                                         const SizedBox(height: 24),
                                         TextFormField(
                                           controller: _phoneController,
+                                          focusNode: _phoneFocusNode,
                                           keyboardType: TextInputType.phone,
                                           decoration: const InputDecoration(
                                             labelText: 'Phone Number',
@@ -177,10 +184,14 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) {
+                                            _passwordFocusNode.requestFocus();
+                                          },
                                         ),
                                         const SizedBox(height: 16),
                                         TextFormField(
                                           controller: _passwordController,
+                                          focusNode: _passwordFocusNode,
                                           obscureText: !_isPasswordVisible,
                                           decoration: InputDecoration(
                                             labelText: 'Password',
@@ -206,10 +217,14 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) {
+                                            _confirmPasswordFocusNode.requestFocus();
+                                          },
                                         ),
                                         const SizedBox(height: 16),
                                         TextFormField(
                                           controller: _confirmPasswordController,
+                                          focusNode: _confirmPasswordFocusNode,
                                           obscureText: !_isConfirmPasswordVisible,
                                           decoration: InputDecoration(
                                             labelText: 'Confirm Password',
@@ -235,6 +250,7 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) => _register(),
                                         ),
                                       ],
                                     ),

@@ -8,7 +8,7 @@ import 'package:image_picker/image_picker.dart';
 class EmailService extends ChangeNotifier {
   final String _baseUrl = kIsWeb
       ? 'https://gmail-backend-1-wlx4.onrender.com/api/email'
-      : 'http://192.168.2.62:3000/api/email';
+      : 'https://gmail-backend-1-wlx4.onrender.com/api/email';
 
   Future<List<Map<String, dynamic>>> listEmails(String folder, {String? labelId}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -263,35 +263,61 @@ class EmailService extends ChangeNotifier {
     }
   }
 
-  Future<List<Map<String, dynamic>>> searchEmails({
+Future<List<Map<String, dynamic>>> searchEmails({
     String? keyword,
     String? from,
     String? to,
     bool? hasAttachment,
     DateTime? startDate,
     DateTime? endDate,
+    int page = 1, // Add pagination
+    int limit = 20,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt');
-    if (token == null) throw 'No token found';
+    if (token == null) throw Exception('No token found');
 
     final queryParams = <String, String>{};
-    if (keyword != null) queryParams['keyword'] = keyword;
-    if (from != null) queryParams['from'] = from;
-    if (to != null) queryParams['to'] = to;
-    if (hasAttachment != null) queryParams['hasAttachment'] = hasAttachment.toString();
-    if (startDate != null) queryParams['startDate'] = startDate.toIso8601String();
-    if (endDate != null) queryParams['endDate'] = endDate.toIso8601String();
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      queryParams['keyword'] = Uri.encodeComponent(keyword.trim());
+    }
+    if (from != null && from.trim().isNotEmpty) {
+      queryParams['from'] = Uri.encodeComponent(from.trim());
+    }
+    if (to != null && to.trim().isNotEmpty) {
+      queryParams['to'] = Uri.encodeComponent(to.trim());
+    }
+    if (hasAttachment != null) {
+      queryParams['hasAttachment'] = hasAttachment.toString();
+    }
+    if (startDate != null) {
+      queryParams['startDate'] = startDate.toUtc().toIso8601String();
+    }
+    if (endDate != null) {
+      queryParams['endDate'] = endDate.toUtc().toIso8601String();
+    }
+    queryParams['page'] = page.toString();
+    queryParams['limit'] = limit.toString();
 
     final uri = Uri.parse('$_baseUrl/search').replace(queryParameters: queryParams);
     final response = await http.get(
       uri,
-      headers: {'Authorization': 'Bearer $token'},
-    );
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    ).timeout(const Duration(seconds: 10), onTimeout: () {
+      throw Exception('Search request timed out');
+    });
+
     if (response.statusCode == 200) {
-      return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+      final data = jsonDecode(response.body);
+      if (data is List) {
+        return List<Map<String, dynamic>>.from(data);
+      }
+      throw Exception('Invalid response format');
     }
-    throw jsonDecode(response.body)['error'] ?? 'Search failed';
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Search failed');
   }
 
   Future<List<Map<String, dynamic>>> getLabels() async {

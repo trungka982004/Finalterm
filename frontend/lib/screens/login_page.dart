@@ -15,6 +15,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _otpController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
+  final _passwordFocusNode = FocusNode();
+  final _otpFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
   bool _isPasswordVisible = false;
   bool _showOtpField = false;
@@ -46,11 +49,14 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     _phoneController.dispose();
     _passwordController.dispose();
     _otpController.dispose();
+    _phoneFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _otpFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isLoading) return;
 
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -166,6 +172,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                         const SizedBox(height: 24),
                                         TextFormField(
                                           controller: _phoneController,
+                                          focusNode: _phoneFocusNode,
                                           keyboardType: TextInputType.phone,
                                           decoration: const InputDecoration(
                                             labelText: 'Phone Number',
@@ -180,10 +187,14 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) {
+                                            _passwordFocusNode.requestFocus();
+                                          },
                                         ),
                                         const SizedBox(height: 16),
                                         TextFormField(
                                           controller: _passwordController,
+                                          focusNode: _passwordFocusNode,
                                           obscureText: !_isPasswordVisible,
                                           decoration: InputDecoration(
                                             labelText: 'Password',
@@ -209,12 +220,20 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) {
+                                            if (_showOtpField) {
+                                              _otpFocusNode.requestFocus();
+                                            } else {
+                                              _login();
+                                            }
+                                          },
                                         ),
                                         const SizedBox(height: 16),
                                         AnimatedCrossFade(
                                           firstChild: const SizedBox.shrink(),
                                           secondChild: TextFormField(
                                             controller: _otpController,
+                                            focusNode: _otpFocusNode,
                                             keyboardType: TextInputType.number,
                                             decoration: const InputDecoration(
                                               labelText: 'OTP',
@@ -226,6 +245,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                               }
                                               return null;
                                             },
+                                            onFieldSubmitted: (_) => _login(),
                                           ),
                                           crossFadeState: _showOtpField
                                               ? CrossFadeState.showSecond

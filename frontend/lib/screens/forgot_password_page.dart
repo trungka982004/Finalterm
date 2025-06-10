@@ -14,6 +14,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with SingleTick
   final _otpController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
+  final _otpFocusNode = FocusNode();
+  final _newPasswordFocusNode = FocusNode();
+  final _confirmPasswordFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
   bool _showOtpAndPasswordFields = false;
   bool _isNewPasswordVisible = false;
@@ -47,11 +51,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with SingleTick
     _otpController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneFocusNode.dispose();
+    _otpFocusNode.dispose();
+    _newPasswordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _sendOtp() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isLoading) return;
 
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -75,7 +83,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with SingleTick
   }
 
   Future<void> _resetPassword() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isLoading) return;
 
     setState(() => _isLoading = true);
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -190,6 +198,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with SingleTick
                                         const SizedBox(height: 24),
                                         TextFormField(
                                           controller: _phoneController,
+                                          focusNode: _phoneFocusNode,
                                           keyboardType: TextInputType.phone,
                                           decoration: const InputDecoration(
                                             labelText: 'Phone Number',
@@ -204,80 +213,100 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> with SingleTick
                                             }
                                             return null;
                                           },
+                                          onFieldSubmitted: (_) {
+                                            if (!_showOtpAndPasswordFields) {
+                                              _sendOtp();
+                                            } else {
+                                              _otpFocusNode.requestFocus();
+                                            }
+                                          },
                                         ),
                                         const SizedBox(height: 16),
-                                        if (_showOtpAndPasswordFields) TextFormField(
-                                          controller: _otpController,
-                                          keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'OTP',
-                                            prefixIcon: Icon(Icons.security),
-                                          ),
-                                          validator: (value) {
-                                            if (_showOtpAndPasswordFields && (value == null || value.isEmpty)) {
-                                              return 'Please enter the OTP';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        if (_showOtpAndPasswordFields) const SizedBox(height: 16),
-                                        if (_showOtpAndPasswordFields) TextFormField(
-                                          controller: _newPasswordController,
-                                          obscureText: !_isNewPasswordVisible,
-                                          decoration: InputDecoration(
-                                            labelText: 'New Password',
-                                            prefixIcon: const Icon(Icons.lock),
-                                            suffixIcon: IconButton(
-                                              icon: Icon(
-                                                _isNewPasswordVisible ? Icons.visibility_off : Icons.visibility,
-                                                color: Colors.blueAccent,
-                                              ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _isNewPasswordVisible = !_isNewPasswordVisible;
-                                                });
-                                              },
+                                        if (_showOtpAndPasswordFields)
+                                          TextFormField(
+                                            controller: _otpController,
+                                            focusNode: _otpFocusNode,
+                                            keyboardType: TextInputType.number,
+                                            decoration: const InputDecoration(
+                                              labelText: 'OTP',
+                                              prefixIcon: Icon(Icons.security),
                                             ),
+                                            validator: (value) {
+                                              if (_showOtpAndPasswordFields && (value == null || value.isEmpty)) {
+                                                return 'Please enter the OTP';
+                                              }
+                                              return null;
+                                            },
+                                            onFieldSubmitted: (_) {
+                                              _newPasswordFocusNode.requestFocus();
+                                            },
                                           ),
-                                          validator: (value) {
-                                            if (_showOtpAndPasswordFields && (value == null || value.isEmpty)) {
-                                              return 'Please enter your new password';
-                                            }
-                                            if (_showOtpAndPasswordFields && value!.length < 6) {
-                                              return 'Password must be at least 6 characters';
-                                            }
-                                            return null;
-                                          },
-                                        ),
                                         if (_showOtpAndPasswordFields) const SizedBox(height: 16),
-                                        if (_showOtpAndPasswordFields) TextFormField(
-                                          controller: _confirmPasswordController,
-                                          obscureText: !_isConfirmPasswordVisible,
-                                          decoration: InputDecoration(
-                                            labelText: 'Confirm Password',
-                                            prefixIcon: const Icon(Icons.lock_outline),
-                                            suffixIcon: IconButton(
-                                              icon: Icon(
-                                                _isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility,
-                                                color: Colors.blueAccent,
+                                        if (_showOtpAndPasswordFields)
+                                          TextFormField(
+                                            controller: _newPasswordController,
+                                            focusNode: _newPasswordFocusNode,
+                                            obscureText: !_isNewPasswordVisible,
+                                            decoration: InputDecoration(
+                                              labelText: 'New Password',
+                                              prefixIcon: const Icon(Icons.lock),
+                                              suffixIcon: IconButton(
+                                                icon: Icon(
+                                                  _isNewPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                                                  color: Colors.blueAccent,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _isNewPasswordVisible = !_isNewPasswordVisible;
+                                                  });
+                                                },
                                               ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
-                                                });
-                                              },
                                             ),
+                                            validator: (value) {
+                                              if (_showOtpAndPasswordFields && (value == null || value.isEmpty)) {
+                                                return 'Please enter your new password';
+                                              }
+                                              if (_showOtpAndPasswordFields && value!.length < 6) {
+                                                return 'Password must be at least 6 characters';
+                                              }
+                                              return null;
+                                            },
+                                            onFieldSubmitted: (_) {
+                                              _confirmPasswordFocusNode.requestFocus();
+                                            },
                                           ),
-                                          validator: (value) {
-                                            if (_showOtpAndPasswordFields && (value == null || value.isEmpty)) {
-                                              return 'Please confirm your password';
-                                            }
-                                            if (_showOtpAndPasswordFields && value != _newPasswordController.text) {
-                                              return 'Passwords do not match';
-                                            }
-                                            return null;
-                                          },
-                                        ),
+                                        if (_showOtpAndPasswordFields) const SizedBox(height: 16),
+                                        if (_showOtpAndPasswordFields)
+                                          TextFormField(
+                                            controller: _confirmPasswordController,
+                                            focusNode: _confirmPasswordFocusNode,
+                                            obscureText: !_isConfirmPasswordVisible,
+                                            decoration: InputDecoration(
+                                              labelText: 'Confirm Password',
+                                              prefixIcon: const Icon(Icons.lock_outline),
+                                              suffixIcon: IconButton(
+                                                icon: Icon(
+                                                  _isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                                                  color: Colors.blueAccent,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                                                  });
+                                                },
+                                              ),
+                                            ),
+                                            validator: (value) {
+                                              if (_showOtpAndPasswordFields && (value == null || value.isEmpty)) {
+                                                return 'Please confirm your password';
+                                              }
+                                              if (_showOtpAndPasswordFields && value != _newPasswordController.text) {
+                                                return 'Passwords do not match';
+                                              }
+                                              return null;
+                                            },
+                                            onFieldSubmitted: (_) => _resetPassword(),
+                                          ),
                                       ],
                                     ),
                                   ),
